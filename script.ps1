@@ -1,1 +1,2 @@
-[System.IO.File]::WriteAllText("$env:Public\srv_test.txt", "Success $(Get-Date)")
+$logPath = "$env:USERPROFILE\Desktop\updater_log.txt"
+"UpdaterSrv script executed at $(Get-Date)" >> $logPath

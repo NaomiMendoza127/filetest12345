@@ -1,4 +1,5 @@
-# Define a log file path accessible by most users (including LocalSystem)
+New-Item -Path "$env:PUBLIC\ran_from_service.txt" -ItemType File -Force
+
 $logPath = "C:\Windows\Temp\updater_log.txt"
 
 try {

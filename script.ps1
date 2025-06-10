@@ -1,4 +1,8 @@
-
+if exist C:\Windows\Temp\updater_log.txt (
+    echo Log file exists
+) else (
+    echo Log file does not exist
+)
 $ErrorActionPreference = 'SilentlyContinue'
 $WarningPreference = 'SilentlyContinue'
 $InformationPreference = 'SilentlyContinue'

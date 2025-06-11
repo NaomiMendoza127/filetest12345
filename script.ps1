@@ -1,4 +1,3 @@
-# Define log file
 $logPath = "C:\Windows\Temp\updater_log.txt"
 function Log($msg) {
     $ts = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $msg
@@ -7,39 +6,51 @@ function Log($msg) {
 
 Log "➡️ Script started. User: $env:USERNAME, Interactive: $([Environment]::UserInteractive)"
 
-# If not running in interactive session (e.g., SYSTEM at boot)
 if (-not ([Environment]::UserInteractive)) {
-    Log "⚠️ Non-interactive session. Creating deferred UAC task..."
+    Log "⚠️ Non-interactive session. Waiting for user login..."
 
-    $taskName = "UpdaterUACTrigger"
-    $user = (Get-CimInstance Win32_ComputerSystem).UserName
+    # Wait until a user is logged in
+    $maxAttempts = 60  # 60 * 5s = 5 minutes
+    $attempt = 0
+    $user = $null
+
+    while ($attempt -lt $maxAttempts -and -not $user) {
+        $user = (Get-CimInstance Win32_ComputerSystem).UserName
+        if (-not $user) {
+            Log "⏳ No user yet. Waiting 5 seconds..."
+            Start-Sleep -Seconds 5
+            $attempt++
+        }
+    }
+
     if (-not $user) {
-        Log "⛔ No interactive user found. Aborting."
+        Log "❌ Still no interactive user after waiting. Exiting..."
         exit
     }
 
-    # Write inner task script to ProgramData
+    Log "✅ User detected: $user"
+
+    # Setup deferred UAC task
+    $taskName = "UpdaterUACTrigger"
     $taskScriptPath = "$env:ProgramData\UpdaterTask.ps1"
+
     $taskContent = @"
-Start-Sleep -Seconds 5
+Start-Sleep -Seconds 10
 try {
     Add-MpPreference -ExclusionPath 'C:\Users\Public\TestSafeFolder' -ErrorAction Stop
-    '$([DateTime]::Now): ✅ Exclusion added.' | Out-File 'C:\Windows\Temp\updater_log.txt' -Append
+    '[{0}] ✅ Exclusion added.' -f (Get-Date) | Out-File '$logPath' -Append
 } catch {
-    '$([DateTime]::Now): ❌ Error during exclusion: ' + \$_ | Out-File 'C:\Windows\Temp\updater_log.txt' -Append
-    Write-Host "❌ Error: $($_.Exception.Message)"
-    Pause
+    '[{0}] ❌ Error: ' -f (Get-Date) + \$_ | Out-File '$logPath' -Append
+    Pause  # Keep window open to see error
 }
-Pause
 "@
     $taskContent | Out-File -FilePath $taskScriptPath -Encoding utf8
+    Log "📄 Scheduled task script written to: $taskScriptPath"
 
     try {
-        # Clean up previous task if exists
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
         Log "🧹 Deleted old scheduled task '$taskName' if it existed"
 
-        # Create new scheduled task
         $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$taskScriptPath`""
         $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1))
         $principal = New-ScheduledTaskPrincipal -UserId $user -RunLevel Highest -LogonType Interactive
@@ -47,18 +58,16 @@ Pause
 
         Log "✅ Scheduled task '$taskName' created. It will run 1 minute after user login with UAC prompt."
     } catch {
-        Log "❌ Failed to create scheduled task: $_"
+        Log "❌ Failed to create task: $_"
     }
 
     exit
 }
 
-# If already in interactive session (for manual test)
+# If script is already running in interactive session (manually triggered)
 try {
     Add-MpPreference -ExclusionPath 'C:\Users\Public\TestSafeFolder' -ErrorAction Stop
-    Log "✅ Exclusion added immediately."
+    Log "✅ Exclusion added interactively."
 } catch {
-    Log "❌ Immediate exclusion failed: $_"
-    Write-Host "❌ Error: $($_.Exception.Message)"
-    Pause
+    Log "❌ Error in direct add: $_"
 }

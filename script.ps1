@@ -47,6 +47,11 @@ if (([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]:
     exit
 }
 
+# Relaunch script with admin rights (UAC will show)
+Start-Process powershell.exe "-ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+exit
+
+
 # Relaunch script with admin rights if needed
 Start-Process powershell.exe "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSCommandPath`"" -Verb RunAs
 exit

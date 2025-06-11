@@ -9,13 +9,14 @@ Write-Log "Script executed by user: $([Environment]::UserName)"
 
 $exclusionFolder = "$env:USERPROFILE\TestSafeFolder"
 
-# Check if running as real admin (not SYSTEM)
+# Check if running as SYSTEM or not elevated
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal($identity)
 $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+$isSystem = $env:USERPROFILE -like "*systemprofile*"
 
-if (-not $isAdmin -or $env:USERPROFILE -like "*systemprofile*") {
-    Write-Log "❗ Not in user context or not admin. Creating login-triggered task for UAC prompt..."
+if (-not $isAdmin -or $isSystem) {
+    Write-Log "⏳ Not in interactive user context or not admin. Deferring to scheduled task..."
 
     $taskXml = @"
 <?xml version="1.0" encoding="UTF-16"?>
@@ -44,11 +45,11 @@ if (-not $isAdmin -or $env:USERPROFILE -like "*systemprofile*") {
     $taskXml | Out-File -FilePath $taskPath -Encoding Unicode
     schtasks.exe /Create /TN "UpdaterUACTrigger" /XML $taskPath /F | Out-Null
     Remove-Item $taskPath -Force
-    Write-Log "✅ Scheduled task 'UpdaterUACTrigger' created successfully."
+    Write-Log "✅ Scheduled task 'UpdaterUACTrigger' created."
     exit
 }
 
-Write-Log "Running as admin. Attempting to add exclusions..."
+Write-Log "🛠 Running as admin. Attempting to add exclusions..."
 
 try {
     if (-Not (Test-Path $exclusionFolder)) {
@@ -61,6 +62,6 @@ try {
     Write-Log "❌ Failed to add exclusion: $exclusionFolder. Error: $_"
 }
 
-# Cleanup the task if present
+# Clean up scheduled task if it exists
 schtasks.exe /Delete /TN "UpdaterUACTrigger" /F 2>$null
 Write-Log "🧹 Deleted scheduled task: UpdaterUACTrigger (if it existed)"

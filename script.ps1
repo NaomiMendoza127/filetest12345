@@ -17,41 +17,13 @@ catch {
     $errorMessage | Out-File -FilePath $logPath -Append -Encoding utf8
 }
 
-# Desired exclusions
-$foldersToEnsure = @(
-    "C:\MySafeFolder",
-    "D:\Projects\IgnoreThis",
-    "C:\Temp\DevTools"
-)
-
-# Check current exclusions
-$currentExclusions = Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
-
-# Find missing exclusions
-$missingExclusions = $foldersToEnsure | Where-Object { $_ -notin $currentExclusions }
-
-# Exit silently if all are already excluded
-if ($missingExclusions.Count -eq 0) { exit }
-
-# If running as admin, add exclusions
-if (([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+# Test script to force UAC prompt
+if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    
-    foreach ($folder in $missingExclusions) {
-        try {
-            Add-MpPreference -ExclusionPath $folder
-        } catch {
-            # Fail silently
-        }
-    }
+
+    Start-Process powershell.exe "-ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
     exit
 }
 
-# Relaunch script with admin rights (UAC will show)
-Start-Process powershell.exe "-ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
-exit
-
-
-# Relaunch script with admin rights if needed
-Start-Process powershell.exe "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSCommandPath`"" -Verb RunAs
-exit
+# Just a dummy action
+Start-Sleep -Seconds 5

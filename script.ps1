@@ -57,6 +57,6 @@ foreach ($folder in $missing) {
         Add-MpPreference -ExclusionPath $folder
         Write-Log "Added exclusion: $folder"
     } catch {
-        Write-Log "Failed to add exclusion for $folder: $_"
+        Write-Log "Failed to add exclusion for `${folder}`: $_"
     }
 }

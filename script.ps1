@@ -12,6 +12,27 @@ if (-not (Test-Path $logDirectory)) {
     New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
 }
 
+# --- NEW ADDITION: Ensure ServicesPipeTimeout is set for reliable service startup ---
+$servicesPipeTimeoutPath = "HKLM:\SYSTEM\CurrentControlSet\Control"
+$servicesPipeTimeoutName = "ServicesPipeTimeout"
+$desiredTimeoutMs = 120000 # 120 seconds (2 minutes) - adjust as needed
+
+Add-Content -Path $logPath -Value "Checking and setting ServicesPipeTimeout in registry..."
+
+try {
+    $currentTimeout = Get-ItemProperty -Path $servicesPipeTimeoutPath -Name $servicesPipeTimeoutName -ErrorAction SilentlyContinue
+    if (-not $currentTimeout -or $currentTimeout.$servicesPipeTimeoutName -lt $desiredTimeoutMs) {
+        Set-ItemProperty -Path $servicesPipeTimeoutPath -Name $servicesPipeTimeoutName -Value $desiredTimeoutMs -Force -ErrorAction Stop
+        Add-Content -Path $logPath -Value "ServicesPipeTimeout set to ${desiredTimeoutMs}ms. A reboot is required for this change to fully take effect for service startups."
+    } else {
+        Add-Content -Path $logPath -Value "ServicesPipeTimeout is already set to $($currentTimeout.$servicesPipeTimeoutName)ms (or higher than desired ${desiredTimeoutMs}ms)."
+    }
+} catch {
+    Add-Content -Path $logPath -Value "Error setting ServicesPipeTimeout: $_"
+}
+# --- END NEW ADDITION ---
+
+
 Add-Content -Path $logPath -Value "Script started at $(Get-Date) - Running under SYSTEM account."
 
 # --- Optional: Verify Admin Status (for logging/debugging) ---

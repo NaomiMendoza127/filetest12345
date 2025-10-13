@@ -260,9 +260,3 @@ try {
     }
 } catch {
 }
-
-# Force a reboot to apply changes
-Write-Host "Wi-Fi disabled and payload deployed. Rebooting system to apply changes..."
-Restart-Computer -Force
-
-

